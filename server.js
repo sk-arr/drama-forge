@@ -3,13 +3,19 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
-const { createConfigStore } = require("./lib/config");
+const { createConfigStore, isMaskedApiKey, mergeConfig } = require("./lib/config");
+const { testAiConnection } = require("./lib/ai");
 
 const HOST = "127.0.0.1";
 const PORT = 3900;
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const defaultConfigStore = createConfigStore();
+const defaultAiService = {
+  testConnection(config) {
+    return testAiConnection(config.ai);
+  },
+};
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -70,6 +76,7 @@ function readJsonBody(req) {
 
 async function handleApi(req, res, pathname, services) {
   const configStore = services.configStore || defaultConfigStore;
+  const aiService = services.aiService || defaultAiService;
   let body = {};
   if (req.method !== "GET" && req.method !== "HEAD") {
     try {
@@ -96,8 +103,18 @@ async function handleApi(req, res, pathname, services) {
   }
 
   if (pathname === "/api/ai/test" && req.method === "POST") {
-    void body;
-    sendJson(res, 501, { error: "连接测试接口尚未实现" });
+    const current = configStore.readConfig();
+    const candidate = mergeConfig(current, body);
+    if (body && body.ai && isMaskedApiKey(body.ai.apiKey)) {
+      candidate.ai.apiKey = current.ai.apiKey;
+    }
+
+    try {
+      const result = await aiService.testConnection(candidate);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, error.statusCode || 502, { error: error.message || "连接测试失败" });
+    }
     return;
   }
 

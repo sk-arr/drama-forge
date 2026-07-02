@@ -122,3 +122,51 @@ test("reads and saves config through API while preserving masked apiKey", async 
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test("tests AI connection through injected service using posted settings", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+
+  try {
+    configStore.saveConfig({
+      ai: {
+        provider: "DeepSeek",
+        baseUrl: "https://api.deepseek.com/v1",
+        model: "deepseek-chat",
+        apiKey: "sk-existing-1234",
+      },
+    });
+
+    const aiService = {
+      async testConnection(config) {
+        assert.equal(config.ai.provider, "Kimi");
+        assert.equal(config.ai.baseUrl, "https://api.moonshot.cn/v1");
+        assert.equal(config.ai.model, "moonshot-v1-8k");
+        assert.equal(config.ai.apiKey, "sk-existing-1234");
+        return { ok: true, latencyMs: 18 };
+      },
+    };
+
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/ai/test`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ai: {
+            provider: "Kimi",
+            baseUrl: "https://api.moonshot.cn/v1",
+            model: "moonshot-v1-8k",
+            apiKey: "sk-e••••1234",
+          },
+        }),
+      });
+      const body = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(body.ok, true);
+      assert.equal(body.latencyMs, 18);
+    }, { configStore, aiService });
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
