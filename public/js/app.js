@@ -164,7 +164,7 @@
       day: "numeric",
       weekday: "short",
     });
-    return formatter.format(new Date()) + " · 后续阶段接入热榜";
+    return formatter.format(new Date());
   }
 
   function clone(value) {
