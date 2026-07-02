@@ -9,7 +9,9 @@ const { createFileOrganizer } = require("./lib/files");
 const { chatCompletion, loadPrompt, renderPrompt, streamChatCompletion, testAiConnection } = require("./lib/ai");
 const {
   copyHistoryTitle,
+  ideasHistoryTitle,
   parseCopyOutput,
+  parseIdeaCards,
   parseStoryboardJson,
   platformLabel,
   platformPromptName,
@@ -274,12 +276,13 @@ async function streamDemoIdeas(res) {
     "3. 题目: 萌宝直播认亲夜\n   一句话逻辑: 结合亲子与寻亲讨论度,把认亲动作前置到前三秒。\n   适配题材: 萌宝寻亲",
   ];
 
+  let content = "";
   for (const chunk of chunks) {
+    content += chunk;
     writeSse(res, { type: "token", token: chunk });
     await new Promise((resolve) => setTimeout(resolve, 120));
   }
-  writeSse(res, { type: "done" });
-  res.end();
+  return content;
 }
 
 function demoReportOutput(type) {
@@ -438,21 +441,29 @@ async function handleApi(req, res, pathname, services) {
 
     sendSseHead(res);
 
-    if (config.demoMode) {
-      await streamDemoIdeas(res);
-      return;
-    }
-
     try {
-      const prompt = buildIdeasPrompt(body, configStore);
-      const content = await aiService.streamIdeas(config, {
-        prompt,
+      let content = "";
+      if (config.demoMode) {
+        content = await streamDemoIdeas(res);
+      } else {
+        const prompt = buildIdeasPrompt(body, configStore);
+        content = await aiService.streamIdeas(config, {
+          prompt,
+          sourceName: body.sourceName || "",
+          list: body.list || [],
+        }, {
+          onToken(token) {
+            writeSse(res, { type: "token", token });
+          },
+        });
+      }
+
+      historyStore.save("ideas", ideasHistoryTitle(body.sourceName), {
         sourceName: body.sourceName || "",
-        list: body.list || [],
+        list: (body.list || []).slice(0, 10),
       }, {
-        onToken(token) {
-          writeSse(res, { type: "token", token });
-        },
+        text: content,
+        cards: parseIdeaCards(content),
       });
       writeSse(res, { type: "done", content });
       res.end();
@@ -631,6 +642,31 @@ async function handleApi(req, res, pathname, services) {
     } catch (error) {
       sendJson(res, 400, { error: error.message || "撤销失败" });
     }
+    return;
+  }
+
+  if (pathname === "/api/history" && req.method === "GET") {
+    const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
+    const type = url.searchParams.get("type") || "";
+    sendJson(res, 200, { list: historyStore.list(type || undefined) });
+    return;
+  }
+
+  if (pathname.startsWith("/api/history/") && req.method === "GET") {
+    let id = "";
+    try {
+      id = decodeURIComponent(pathname.slice("/api/history/".length));
+    } catch (error) {
+      sendJson(res, 400, { error: "记录编号不合法" });
+      return;
+    }
+
+    const record = historyStore.get(id);
+    if (!record) {
+      sendJson(res, 404, { error: "历史记录不存在或已被清理" });
+      return;
+    }
+    sendJson(res, 200, record);
     return;
   }
 
