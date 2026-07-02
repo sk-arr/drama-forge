@@ -775,13 +775,15 @@ textarea.input {
 }
 
 .hot-card {
-  display: block;
-  padding: 10px;
+  display: flex;
+  min-height: 150px;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
   border: 1px solid #EEF2F7;
   border-radius: var(--radius-card);
   background: var(--surface);
   box-shadow: var(--shadow-card);
-  text-decoration: none;
   transition: var(--transition-fast);
 }
 
@@ -790,75 +792,14 @@ textarea.input {
   box-shadow: var(--shadow-card-hover);
 }
 
-.hot-cover {
-  position: relative;
+.hot-card-head {
   display: flex;
   align-items: center;
-  justify-content: center;
-  height: 110px;
-  overflow: hidden;
-  border-radius: 12px;
-  background-position: center;
-  background-size: cover;
-}
-
-.hot-cover.c1 {
-  background-image: linear-gradient(135deg,#818CF8,#C084FC);
-}
-
-.hot-cover.c2 {
-  background-image: linear-gradient(135deg,#60A5FA,#818CF8);
-}
-
-.hot-cover.c3 {
-  background-image: linear-gradient(135deg,#F472B6,#C084FC);
-}
-
-.hot-cover.has-image::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg,rgba(15,23,42,.08),rgba(15,23,42,.18));
-}
-
-.hot-cover-fallback {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: flex-start;
   gap: 6px;
-  padding: 42px 14px 14px;
-  color: #fff;
-  background: linear-gradient(180deg,rgba(15,23,42,.05),rgba(15,23,42,.30));
-}
-
-.hot-cover-fallback span {
-  padding: 3px 8px;
-  border-radius: var(--radius-button);
-  background: rgba(255,255,255,.20);
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.hot-cover-fallback strong {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  font-size: 15px;
-  font-weight: 900;
-  line-height: 1.28;
-  text-shadow: 0 1px 8px rgba(15,23,42,.22);
+  min-height: 34px;
 }
 
 .rank-badge {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 2;
   padding: 3px 10px;
   border-radius: var(--radius-button);
   background: var(--gradient-primary);
@@ -868,43 +809,61 @@ textarea.input {
   font-weight: 800;
 }
 
-.play {
-  position: relative;
-  z-index: 2;
+.source-chip {
+  padding: 3px 9px;
+  border-radius: var(--radius-button);
+  background: #EEF2FF;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.hot-card-action {
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
-  background: rgba(255,255,255,.92);
+  background: #F8FAFC;
   color: var(--primary);
-  box-shadow: 0 4px 14px rgba(15,23,42,.18);
+  text-decoration: none;
+  border: 1px solid var(--border);
   transition: var(--transition-fast);
 }
 
-.hot-card:hover .play {
-  transform: scale(1.12);
+.hot-card-action:hover {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
 }
 
-.play svg {
-  width: 18px;
-  height: 18px;
+.hot-card-action svg {
+  width: 16px;
+  height: 16px;
 }
 
-.hot-title {
-  margin: 10px 6px 3px;
+.hot-card-title {
   color: var(--text);
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 800;
-  line-height: 1.45;
+  line-height: 1.35;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.hot-card-title:hover {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .hot-meta {
-  margin: 0 6px 4px;
+  margin-top: auto;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .hot-list-card {
@@ -920,7 +879,6 @@ textarea.input {
   padding: 12px 2px;
   border-bottom: 1px solid #F1F5F9;
   color: inherit;
-  text-decoration: none;
   transition: var(--transition-fast);
 }
 
@@ -953,6 +911,16 @@ textarea.input {
   line-height: 1.4;
 }
 
+.row-title-link {
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+
+.row-title-link:hover {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
 .row-heat {
   flex: 0 0 auto;
   color: var(--muted);
@@ -962,7 +930,20 @@ textarea.input {
 
 .row-arrow {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   color: #C7D2FE;
+  text-decoration: none;
+  border-radius: 50%;
+  transition: var(--transition-fast);
+}
+
+.row-arrow:hover {
+  color: var(--primary);
+  background: #EEF2FF;
 }
 
 .row-arrow svg {
@@ -2190,14 +2171,6 @@ textarea.input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.hot-title {
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
 }
 
 a:focus-visible,

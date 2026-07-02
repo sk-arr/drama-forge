@@ -738,9 +738,9 @@
   function renderHotSkeleton() {
     return [
       '<div class="hot-top-grid">',
-      '<div class="card card-pad"><div class="skeleton" style="height:110px"></div></div>',
-      '<div class="card card-pad"><div class="skeleton" style="height:110px"></div></div>',
-      '<div class="card card-pad"><div class="skeleton" style="height:110px"></div></div>',
+      '<div class="hot-card"><div class="skeleton" style="width:90px;height:22px"></div><div class="skeleton" style="height:24px"></div><div class="skeleton" style="width:60%;height:16px"></div></div>',
+      '<div class="hot-card"><div class="skeleton" style="width:90px;height:22px"></div><div class="skeleton" style="height:24px"></div><div class="skeleton" style="width:60%;height:16px"></div></div>',
+      '<div class="hot-card"><div class="skeleton" style="width:90px;height:22px"></div><div class="skeleton" style="height:24px"></div><div class="skeleton" style="width:60%;height:16px"></div></div>',
       "</div>",
       '<div class="hot-list-card card">',
       Array.from({ length: 7 }).map(function () {
@@ -780,36 +780,27 @@
     return [
       '<div class="hot-top-grid">',
       list.slice(0, 3).map(function (item, index) {
-        var coverClass = "c" + ((index % 3) + 1);
-        var style = item.cover ? ' style="background-image:url(' + ui.escapeHtml(item.cover) + ')"' : "";
-        var fallback = item.cover ? "" : [
-          '<span class="hot-cover-fallback"><span>',
-          ui.escapeHtml(sourceLabel),
-          '</span><strong>',
-          ui.escapeHtml(item.title),
-          "</strong></span>",
-        ].join("");
+        var url = itemUrl(sourceId, item);
         return [
-          '<a class="hot-card" href="',
-          ui.escapeHtml(itemUrl(sourceId, item)),
-          '" target="_blank" rel="noreferrer">',
-          '<div class="hot-cover ',
-          coverClass,
-          item.cover ? " has-image" : "",
-          '"',
-          style,
-          '><span class="rank-badge">',
+          '<div class="hot-card">',
+          '<div class="hot-card-head"><span class="rank-badge">',
           ui.escapeHtml(topLabels[index]),
-          "</span>",
-          fallback,
-          '<span class="play">',
-          ui.icon("chevron"),
-          "</span></div>",
-          '<div class="hot-title">',
+          '</span><span class="source-chip">',
+          ui.escapeHtml(sourceLabel),
+          '</span><a class="hot-card-action" href="',
+          ui.escapeHtml(url),
+          '" target="_blank" rel="noreferrer" aria-label="打开 ',
           ui.escapeHtml(item.title),
-          '</div><div class="hot-meta">',
+          '">',
+          ui.icon("chevron"),
+          "</a></div>",
+          '<a class="hot-card-title" href="',
+          ui.escapeHtml(url),
+          '" target="_blank" rel="noreferrer">',
+          ui.escapeHtml(item.title),
+          '</a><div class="hot-meta">',
           ui.escapeHtml(item.heat || "热度上升"),
-          " · 点击看视频</div></a>",
+          " · 点击标题查看</div></div>",
         ].join("");
       }).join(""),
       "</div>",
@@ -820,19 +811,24 @@
     return [
       '<div class="hot-list-card card">',
       list.slice(3, 10).map(function (item) {
+        var url = itemUrl(sourceId, item);
         return [
-          '<a class="hot-list-row" href="',
-          ui.escapeHtml(itemUrl(sourceId, item)),
-          '" target="_blank" rel="noreferrer">',
+          '<div class="hot-list-row">',
           '<span class="row-rank">',
           ui.escapeHtml(item.rank),
-          '</span><span class="row-title">',
+          '</span><a class="row-title row-title-link" href="',
+          ui.escapeHtml(url),
+          '" target="_blank" rel="noreferrer">',
           ui.escapeHtml(item.title),
-          '</span><span class="row-heat">',
+          '</a><span class="row-heat">',
           ui.escapeHtml(item.heat || ""),
-          '</span><span class="row-arrow">',
+          '</span><a class="row-arrow" href="',
+          ui.escapeHtml(url),
+          '" target="_blank" rel="noreferrer" aria-label="打开 ',
+          ui.escapeHtml(item.title),
+          '">',
           ui.icon("chevron"),
-          "</span></a>",
+          "</a></div>",
         ].join("");
       }).join(""),
       "</div>",

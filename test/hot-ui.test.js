@@ -44,11 +44,12 @@ test("hot page css includes top cards, rows, and ideas styles", () => {
     ".hot-toolbar",
     ".hot-top-grid",
     ".hot-card",
-    ".hot-cover",
-    ".hot-cover-fallback",
+    ".hot-card-title",
+    ".hot-card-head",
     ".rank-badge",
     ".hot-list-card",
     ".hot-list-row",
+    ".row-title-link",
     ".ai-card",
     ".idea-grid",
   ].forEach((selector) => {
@@ -56,7 +57,12 @@ test("hot page css includes top cards, rows, and ideas styles", () => {
   });
 });
 
-test("top hot cards render a designed fallback when cover is absent", () => {
-  assert.ok(appJs.includes("hot-cover-fallback"), "missing fallback cover markup");
-  assert.ok(appJs.includes("sourceLabelFor"), "missing source label helper");
+test("hot page uses text links instead of remote image covers", () => {
+  assert.ok(appJs.includes("hot-card-title"), "missing top-card title link markup");
+  assert.ok(appJs.includes("row-title-link"), "missing list title link markup");
+  assert.doesNotMatch(appJs, /hot-cover/);
+  assert.doesNotMatch(appJs, /background-image:url/);
+  assert.doesNotMatch(appJs, /height:110px/);
+  assert.doesNotMatch(css, /\.hot-cover\b/);
+  assert.doesNotMatch(css, /\.play\b/);
 });
