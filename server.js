@@ -56,6 +56,15 @@ const defaultAiService = {
       maxTokens: 1800,
     }, { timeoutMs: 60000 });
   },
+  streamReport(config, payload, options) {
+    return streamChatCompletion(config.ai, {
+      messages: [
+        { role: "user", content: payload.prompt },
+      ],
+      temperature: 0.4,
+      maxTokens: 1100,
+    }, options);
+  },
 };
 
 const MIME_TYPES = {
@@ -146,6 +155,49 @@ function buildStoryboardPrompt(body, configStore) {
   });
 }
 
+function formatChineseDate(date) {
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function startOfWeek(date) {
+  const result = new Date(date);
+  const day = result.getDay();
+  const offset = day === 0 ? 6 : day - 1;
+  result.setDate(result.getDate() - offset);
+  return result;
+}
+
+function reportTypeLabel(type) {
+  return type === "day" ? "日报" : "周报";
+}
+
+function reportDateRange(type, now) {
+  const current = now || new Date();
+  if (type === "day") {
+    return formatChineseDate(current);
+  }
+  const start = startOfWeek(current);
+  return `${formatChineseDate(start)}—${formatChineseDate(current)}`;
+}
+
+function buildReportPrompt(body, configStore) {
+  const type = body.type === "day" ? "day" : "week";
+  const dateRange = reportDateRange(type);
+  const template = loadPrompt("report", {
+    rootDir: ROOT_DIR,
+    dataDir: configStore.dataDir,
+  });
+  return {
+    dateRange,
+    type,
+    prompt: renderPrompt(template, {
+      "记录": body.text || "",
+      "类型": type,
+      "日期范围": dateRange,
+    }),
+  };
+}
+
 function demoCopyOutput(platform) {
   if (platform === "kuaishou") {
     return [
@@ -226,6 +278,40 @@ async function streamDemoIdeas(res) {
   }
   writeSse(res, { type: "done" });
   res.end();
+}
+
+function demoReportOutput(type) {
+  return type === "day" ? [
+    "今日完成",
+    "- 完成 3 条素材粗剪,同步给投放同学初筛。",
+    "- 复盘昨天 2 个低完播素材,定位到前 3 秒冲突不够直给。",
+    "",
+    "数据亮点",
+    "- 新标题测试保留了原始记录里的 18.6% 完播率。",
+    "- 小程序链路点击成本稳定在 0.42 元。",
+    "",
+    "明日计划",
+    "- 继续补 5 条女频逆袭开场钩子。",
+    "- 把高点击素材拆成分镜模板给拍摄组。",
+    "",
+    "风险",
+    "- 口播素材库存不足,需要明早补录。",
+  ].join("\n") : [
+    "本周完成",
+    "- 完成 12 条投放素材整理,其中 4 条进入二轮测试。",
+    "- 跑通热点选题到文案、分镜、导出 CSV 的演示流程。",
+    "",
+    "数据亮点",
+    "- 女频逆袭方向保留了原始记录里的 23% 完播率。",
+    "- 素材命名统一后,剪辑查找时间从 20 分钟降到 5 分钟。",
+    "",
+    "下周计划",
+    "- 补齐提示词库和历史记录页,准备 7 月 8 日演示。",
+    "- 继续测试微信小程序付费钩子文案。",
+    "",
+    "风险与需要支持",
+    "- 热榜公共接口偶发不可用,需要保留缓存和演示模式兜底。",
+  ].join("\n");
 }
 
 function readJsonBody(req) {
@@ -423,6 +509,54 @@ async function handleApi(req, res, pathname, services) {
       sendJson(res, 200, { list });
     } catch (error) {
       sendJson(res, 502, { error: error.message || "分镜生成失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/ai/report" && req.method === "POST") {
+    const config = configStore.readConfig();
+    if (!config.demoMode && !(config.ai && config.ai.apiKey)) {
+      sendJson(res, 400, { error: "先到设置页配置 API Key" });
+      return;
+    }
+    if (!String(body.text || "").trim()) {
+      sendJson(res, 400, { error: "先粘贴工作记录" });
+      return;
+    }
+
+    const reportPayload = buildReportPrompt(body, configStore);
+    sendSseHead(res);
+
+    try {
+      let content = "";
+      if (config.demoMode) {
+        content = demoReportOutput(reportPayload.type);
+        for (const chunk of content.split(/(?=\n|^- )/m)) {
+          if (chunk) {
+            writeSse(res, { type: "token", token: chunk });
+          }
+        }
+      } else {
+        content = await aiService.streamReport(config, {
+          prompt: reportPayload.prompt,
+          input: body,
+        }, {
+          onToken(token) {
+            writeSse(res, { type: "token", token });
+          },
+        });
+      }
+
+      historyStore.save("report", `${reportTypeLabel(reportPayload.type)} · ${reportPayload.dateRange}`, {
+        text: body.text || "",
+        type: reportPayload.type,
+        dateRange: reportPayload.dateRange,
+      }, content);
+      writeSse(res, { type: "done", content, dateRange: reportPayload.dateRange });
+      res.end();
+    } catch (error) {
+      writeSse(res, { type: "error", error: error.message || "周报生成失败" });
+      res.end();
     }
     return;
   }

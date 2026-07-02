@@ -261,6 +261,80 @@ test("streams topic ideas through /api/ai/ideas", async () => {
   }
 });
 
+test("streams AI report and writes history", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+  const historyStore = createHistoryStore({ dataDir });
+  configStore.saveConfig({
+    ai: {
+      provider: "DeepSeek",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-chat",
+      apiKey: "key-report",
+    },
+  });
+
+  const aiService = {
+    async streamReport(config, payload, options) {
+      assert.equal(config.ai.apiKey, "key-report");
+      assert.match(payload.prompt, /本周完成/);
+      assert.match(payload.prompt, /23/);
+      options.onToken("本周完成\n- 完成 23 条素材复盘。");
+      options.onToken("\n\n数据亮点\n- 完播率 18.6% 保持不变。");
+      return "本周完成\n- 完成 23 条素材复盘。\n\n数据亮点\n- 完播率 18.6% 保持不变。";
+    },
+  };
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/ai/report`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          type: "week",
+          text: "这周复盘 23 条素材,完播率 18.6%",
+        }),
+      });
+      const text = await response.text();
+
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type"), /text\/event-stream/);
+      assert.match(text, /23 条素材/);
+      assert.match(text, /18\.6%/);
+      assert.match(text, /"type":"done"/);
+
+      const historyFiles = fs.readdirSync(path.join(dataDir, "history"));
+      assert.equal(historyFiles.length, 1);
+      const record = JSON.parse(fs.readFileSync(path.join(dataDir, "history", historyFiles[0]), "utf8"));
+      assert.equal(record.type, "report");
+      assert.match(record.title, /周报 · /);
+    }, { configStore, aiService, historyStore });
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("rejects report generation when apiKey is missing and demo mode is off", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/ai/report`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "week", text: "完成 3 条素材" }),
+      });
+      const body = await response.json();
+
+      assert.equal(response.status, 400);
+      assert.equal(body.error, "先到设置页配置 API Key");
+    }, { configStore });
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
 test("rejects topic ideas when apiKey is missing and demo mode is off", async () => {
   const dataDir = makeDataDir();
   const configStore = createConfigStore({ dataDir });
