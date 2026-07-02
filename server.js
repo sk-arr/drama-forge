@@ -5,7 +5,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { createHotCache } = require("./lib/cache");
 const { createConfigStore, isMaskedApiKey, mergeConfig } = require("./lib/config");
-const { testAiConnection } = require("./lib/ai");
+const { loadPrompt, renderPrompt, streamChatCompletion, testAiConnection } = require("./lib/ai");
 
 const HOST = "127.0.0.1";
 const PORT = 3900;
@@ -16,6 +16,15 @@ const defaultHotService = createHotCache({ dataDir: defaultConfigStore.dataDir }
 const defaultAiService = {
   testConnection(config) {
     return testAiConnection(config.ai);
+  },
+  streamIdeas(config, payload, options) {
+    return streamChatCompletion(config.ai, {
+      messages: [
+        { role: "user", content: payload.prompt },
+      ],
+      temperature: 0.9,
+      maxTokens: 900,
+    }, options);
   },
 };
 
@@ -44,6 +53,58 @@ function sendText(res, statusCode, text) {
     "content-length": Buffer.byteLength(text),
   });
   res.end(text);
+}
+
+function sendSseHead(res) {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive",
+  });
+}
+
+function writeSse(res, payload) {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+function formatHotBoardForPrompt(list) {
+  return (Array.isArray(list) ? list : [])
+    .slice(0, 10)
+    .map((item, index) => {
+      const rank = item.rank || index + 1;
+      const heat = item.heat ? `（热度:${item.heat}）` : "";
+      return `${rank}. ${item.title || ""}${heat}`;
+    })
+    .filter((line) => line.trim())
+    .join("\n");
+}
+
+function buildIdeasPrompt(body, configStore) {
+  const sourceName = body.sourceName || "今日热点";
+  const boardText = formatHotBoardForPrompt(body.list);
+  const template = loadPrompt("topic-ideas", {
+    rootDir: ROOT_DIR,
+    dataDir: configStore.dataDir,
+  });
+  return renderPrompt(template, {
+    "来源": sourceName,
+    "榜单": boardText || "暂无榜单数据",
+  });
+}
+
+async function streamDemoIdeas(res) {
+  const chunks = [
+    "1. 题目: 保洁阿姨的总裁局\n   一句话逻辑: 借用身份反差热度,把低姿态职业与高权力身份放进开场反转。\n   适配题材: 女频逆袭\n",
+    "2. 题目: 逆风翻盘的下班十分钟\n   一句话逻辑: 承接职场情绪榜单,用短时间高压场景制造爽点。\n   适配题材: 都市打脸\n",
+    "3. 题目: 萌宝直播认亲夜\n   一句话逻辑: 结合亲子与寻亲讨论度,把认亲动作前置到前三秒。\n   适配题材: 萌宝寻亲",
+  ];
+
+  for (const chunk of chunks) {
+    writeSse(res, { type: "token", token: chunk });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+  writeSse(res, { type: "done" });
+  res.end();
 }
 
 function readJsonBody(req) {
@@ -119,6 +180,40 @@ async function handleApi(req, res, pathname, services) {
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, error.statusCode || 502, { error: error.message || "连接测试失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/ai/ideas" && req.method === "POST") {
+    const config = configStore.readConfig();
+    if (!config.demoMode && !(config.ai && config.ai.apiKey)) {
+      sendJson(res, 400, { error: "先到设置页配置 API Key" });
+      return;
+    }
+
+    sendSseHead(res);
+
+    if (config.demoMode) {
+      await streamDemoIdeas(res);
+      return;
+    }
+
+    try {
+      const prompt = buildIdeasPrompt(body, configStore);
+      const content = await aiService.streamIdeas(config, {
+        prompt,
+        sourceName: body.sourceName || "",
+        list: body.list || [],
+      }, {
+        onToken(token) {
+          writeSse(res, { type: "token", token });
+        },
+      });
+      writeSse(res, { type: "done", content });
+      res.end();
+    } catch (error) {
+      writeSse(res, { type: "error", error: error.message || "选题生成失败" });
+      res.end();
     }
     return;
   }

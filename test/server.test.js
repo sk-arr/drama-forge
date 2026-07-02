@@ -203,3 +203,73 @@ test("serves a single hot source through /api/hot", async () => {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test("streams topic ideas through /api/ai/ideas", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+  configStore.saveConfig({
+    ai: {
+      provider: "DeepSeek",
+      baseUrl: "https://api.deepseek.com/v1",
+      model: "deepseek-chat",
+      apiKey: "key-ideas",
+    },
+  });
+
+  const aiService = {
+    async testConnection() {
+      return { ok: true, latencyMs: 1 };
+    },
+    async streamIdeas(config, payload, options) {
+      assert.equal(config.ai.apiKey, "key-ideas");
+      assert.match(payload.prompt, /保洁阿姨竟是总裁/);
+      options.onToken("题目: 反差总裁");
+      options.onToken("\\n逻辑: 身份反转");
+      return "题目: 反差总裁\n逻辑: 身份反转";
+    },
+  };
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/ai/ideas`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sourceName: "抖音",
+          list: [
+            { rank: 1, title: "保洁阿姨竟是总裁", heat: "100w" },
+          ],
+        }),
+      });
+      const text = await response.text();
+
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get("content-type"), /text\/event-stream/);
+      assert.match(text, /反差总裁/);
+      assert.match(text, /"type":"done"/);
+    }, { configStore, aiService });
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("rejects topic ideas when apiKey is missing and demo mode is off", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/ai/ideas`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ list: [] }),
+      });
+      const body = await response.json();
+
+      assert.equal(response.status, 400);
+      assert.equal(body.error, "先到设置页配置 API Key");
+    }, { configStore });
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
