@@ -1,0 +1,7 @@
+{
+  "name": "drama-forge",
+  "version": "0.1.0",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

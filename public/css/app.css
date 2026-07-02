@@ -1,0 +1,8 @@
+:root {
+  --bg: #F8FAFC;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
