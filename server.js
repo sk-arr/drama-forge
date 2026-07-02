@@ -5,6 +5,7 @@ const http = require("node:http");
 const path = require("node:path");
 const { createHotCache } = require("./lib/cache");
 const { createConfigStore, isMaskedApiKey, mergeConfig } = require("./lib/config");
+const { createFileOrganizer } = require("./lib/files");
 const { chatCompletion, loadPrompt, renderPrompt, streamChatCompletion, testAiConnection } = require("./lib/ai");
 const {
   copyHistoryTitle,
@@ -23,6 +24,7 @@ const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const defaultConfigStore = createConfigStore();
 const defaultHotService = createHotCache({ dataDir: defaultConfigStore.dataDir });
 const defaultHistoryStore = createHistoryStore({ dataDir: defaultConfigStore.dataDir });
+const defaultFileOrganizer = createFileOrganizer({ historyStore: defaultHistoryStore });
 const defaultAiService = {
   testConnection(config) {
     return testAiConnection(config.ai);
@@ -262,6 +264,9 @@ async function handleApi(req, res, pathname, services) {
   const historyStore = services.historyStore || (configStore === defaultConfigStore
     ? defaultHistoryStore
     : createHistoryStore({ dataDir: configStore.dataDir }));
+  const fileOrganizer = services.fileOrganizer || (configStore === defaultConfigStore
+    ? defaultFileOrganizer
+    : createFileOrganizer({ historyStore }));
   const hotService = services.hotService || (configStore === defaultConfigStore
     ? defaultHotService
     : createHotCache({ dataDir: configStore.dataDir }));
@@ -418,6 +423,47 @@ async function handleApi(req, res, pathname, services) {
       sendJson(res, 200, { list });
     } catch (error) {
       sendJson(res, 502, { error: error.message || "分镜生成失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/files/browse" && req.method === "GET") {
+    const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
+    try {
+      const result = fileOrganizer.browse(url.searchParams.get("path") || "");
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "读取文件夹失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/files/scan" && req.method === "POST") {
+    try {
+      const result = fileOrganizer.scan(body);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "扫描失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/files/execute" && req.method === "POST") {
+    try {
+      const result = fileOrganizer.execute(body);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "执行整理失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/files/undo" && req.method === "POST") {
+    try {
+      const result = fileOrganizer.undo(body);
+      sendJson(res, 200, result);
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "撤销失败" });
     }
     return;
   }

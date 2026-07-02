@@ -8,6 +8,8 @@ const path = require("node:path");
 
 const { createServer } = require("../server");
 const { createConfigStore } = require("../lib/config");
+const { createFileOrganizer } = require("../lib/files");
+const { createHistoryStore } = require("../lib/history");
 
 async function withServer(fn, options) {
   const server = createServer(options);
@@ -28,6 +30,12 @@ function makeDataDir() {
   const dataDir = path.join(__dirname, "..", "data", `server-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   fs.mkdirSync(dataDir, { recursive: true });
   return dataDir;
+}
+
+function makeTmpDir(name) {
+  const dir = path.join(__dirname, "..", "tmp-test", `${name}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 test("serves the static homepage from public/index.html", async () => {
@@ -385,6 +393,89 @@ test("returns storyboard table and writes history", async () => {
     }, { configStore, aiService });
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("file APIs scan, execute, and undo inside the selected directory", async () => {
+  const dir = makeTmpDir("api-files");
+  const dataDir = path.join(dir, ".data");
+  const historyStore = createHistoryStore({ dataDir });
+  const fileOrganizer = createFileOrganizer({ historyStore });
+  const configStore = createConfigStore({ dataDir });
+  const mtime = new Date("2026-07-02T08:00:00+08:00");
+
+  try {
+    fs.writeFileSync(path.join(dir, "a.mp4"), "video");
+    fs.writeFileSync(path.join(dir, "b.jpg"), "image");
+    fs.utimesSync(path.join(dir, "a.mp4"), mtime, mtime);
+    fs.utimesSync(path.join(dir, "b.jpg"), mtime, mtime);
+    fs.mkdirSync(path.join(dir, "child"));
+
+    await withServer(async (baseUrl) => {
+      const browseResponse = await fetch(`${baseUrl}/api/files/browse?path=${encodeURIComponent(dir)}`);
+      const browseBody = await browseResponse.json();
+      assert.equal(browseResponse.status, 200);
+      assert.deepEqual(browseBody.dirs.map((item) => item.name), ["child"]);
+
+      const scanResponse = await fetch(`${baseUrl}/api/files/scan`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dir, rule: "type", template: "{日期}_{类型}_{序号}" }),
+      });
+      const scanBody = await scanResponse.json();
+      assert.equal(scanResponse.status, 200);
+      assert.equal(scanBody.total, 2);
+      assert.equal(fs.existsSync(path.join(dir, "a.mp4")), true);
+
+      const executeResponse = await fetch(`${baseUrl}/api/files/execute`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dir, plan: scanBody.plan }),
+      });
+      const executeBody = await executeResponse.json();
+      assert.equal(executeResponse.status, 200);
+      assert.equal(executeBody.moved, 2);
+      assert.equal(executeBody.failed.length, 0);
+      assert.equal(fs.existsSync(path.join(dir, "a.mp4")), false);
+
+      const undoResponse = await fetch(`${baseUrl}/api/files/undo`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ historyId: executeBody.historyId }),
+      });
+      const undoBody = await undoResponse.json();
+      assert.equal(undoResponse.status, 200);
+      assert.equal(undoBody.restored, 2);
+      assert.equal(fs.existsSync(path.join(dir, "a.mp4")), true);
+      assert.equal(fs.existsSync(path.join(dir, "b.jpg")), true);
+    }, { configStore, fileOrganizer, historyStore });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("file scan API rejects traversal templates", async () => {
+  const dir = makeTmpDir("api-files-traversal");
+  const dataDir = path.join(dir, ".data");
+  const historyStore = createHistoryStore({ dataDir });
+  const fileOrganizer = createFileOrganizer({ historyStore });
+  const configStore = createConfigStore({ dataDir });
+
+  try {
+    fs.writeFileSync(path.join(dir, "a.mp4"), "video");
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/files/scan`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dir, rule: "type", template: "..\\{序号}" }),
+      });
+      const body = await response.json();
+      assert.equal(response.status, 400);
+      assert.match(body.error, /重命名模板不能包含路径/);
+      assert.equal(fs.existsSync(path.join(dir, "a.mp4")), true);
+    }, { configStore, fileOrganizer, historyStore });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
