@@ -51,3 +51,14 @@ test("includes the stage-one shared component classes", () => {
     assert.ok(css.includes(className), `missing class: ${className}`);
   });
 });
+
+test("keeps tablet widths on the two-column app shell", () => {
+  const tabletBlock = css.match(/@media \(max-width: 900px\) \{[\s\S]*?\n\}/);
+  const phoneBlock = css.match(/@media \(max-width: 640px\) \{[\s\S]*?\n\}/);
+
+  assert.ok(tabletBlock, "missing tablet media query");
+  assert.ok(phoneBlock, "missing phone media query");
+  assert.doesNotMatch(tabletBlock[0], /\.app-shell\s*\{\s*display:\s*block;/);
+  assert.match(phoneBlock[0], /\.app-shell\s*\{\s*display:\s*block;/);
+  assert.match(tabletBlock[0], /\.hot-top-grid\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
+});

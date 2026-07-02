@@ -1795,6 +1795,31 @@ textarea.input {
 }
 
 @media (max-width: 900px) {
+  .main {
+    max-width: none;
+    padding: 24px 18px 40px;
+  }
+
+  .hot-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .hot-top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid,
+  .copy-layout,
+  .copy-results-grid,
+  .files-layout,
+  .report-layout,
+  .storyboard-layout,
+  .source-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
   .app-shell {
     display: block;
   }
@@ -1811,21 +1836,6 @@ textarea.input {
 
   .sidebar-foot {
     margin-top: 12px;
-  }
-
-  .main {
-    max-width: none;
-    padding: 24px 18px 40px;
-  }
-
-  .form-grid,
-  .copy-layout,
-  .copy-results-grid,
-  .files-layout,
-  .report-layout,
-  .storyboard-layout,
-  .source-grid {
-    grid-template-columns: 1fr;
   }
 }
 
