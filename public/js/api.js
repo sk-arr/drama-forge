@@ -91,7 +91,7 @@
         callbacks.onToken(event.token || "");
       }
       if (event.type === "done" && callbacks.onDone) {
-        callbacks.onDone(event.content || "");
+        callbacks.onDone(event.content || "", event);
       }
       if (event.type === "final" && callbacks.onFinal) {
         callbacks.onFinal(event.result || null);
@@ -123,6 +123,10 @@
 
   function generateCopy(payload, handlers, signal) {
     return streamSse("/api/ai/copy", payload, handlers, signal);
+  }
+
+  function generateReport(payload, handlers, signal) {
+    return streamSse("/api/ai/report", payload, handlers, signal);
   }
 
   function generateStoryboard(payload) {
@@ -166,6 +170,7 @@
     executeFiles: executeFiles,
     generateCopy: generateCopy,
     generateIdeas: generateIdeas,
+    generateReport: generateReport,
     generateStoryboard: generateStoryboard,
     getConfig: getConfig,
     getHot: getHot,

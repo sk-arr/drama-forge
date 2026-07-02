@@ -127,6 +127,15 @@
         error: "",
       },
     },
+    report: {
+      text: "",
+      type: "week",
+      loading: false,
+      controller: null,
+      content: "",
+      dateRange: "",
+      error: "",
+    },
   };
 
   function getTodayMeta() {
@@ -515,6 +524,52 @@
   function fileTypeInitial(type) {
     var text = String(type || "其他");
     return text.slice(0, 1);
+  }
+
+  function reportTypeLabel(type) {
+    return type === "day" ? "日报" : "周报";
+  }
+
+  function reportFilenamePrefix(type) {
+    return type === "day" ? "日报" : "周报";
+  }
+
+  function chineseDate(date) {
+    return (date.getMonth() + 1) + "月" + date.getDate() + "日";
+  }
+
+  function reportDateRange(type) {
+    var now = new Date();
+    if (type === "day") {
+      return chineseDate(now);
+    }
+    var start = new Date(now);
+    var day = start.getDay();
+    var offset = day === 0 ? 6 : day - 1;
+    start.setDate(start.getDate() - offset);
+    return chineseDate(start) + "—" + chineseDate(now);
+  }
+
+  function collectReportForm() {
+    var form = document.querySelector("[data-report-form]");
+    if (!form) {
+      return;
+    }
+    var data = new FormData(form);
+    state.report.text = String(data.get("text") || "").trim();
+    state.report.type = String(data.get("type") || "week") === "day" ? "day" : "week";
+  }
+
+  function reportSectionTitle(line) {
+    return [
+      "本周完成",
+      "今日完成",
+      "数据亮点",
+      "下周计划",
+      "明日计划",
+      "风险与需要支持",
+      "风险",
+    ].indexOf(String(line || "").trim()) >= 0;
   }
 
   function renderNavItem(route) {
@@ -1026,6 +1081,99 @@
     ].join("");
   }
 
+  function renderReportBody() {
+    var content = state.report.content;
+    if (!content && state.report.loading) {
+      return [
+        '<div class="report-body">',
+        '<div class="skeleton" style="height:18px;width:42%"></div>',
+        '<div class="skeleton" style="height:18px;width:82%"></div>',
+        '<div class="skeleton" style="height:18px;width:74%"></div>',
+        '<div class="skeleton" style="height:18px;width:52%"></div>',
+        "</div>",
+      ].join("");
+    }
+
+    if (!content) {
+      return [
+        '<div class="report-empty">',
+        ui.icon("report"),
+        "<h2>还没有周报</h2><p>把零散记录粘到左侧，生成后这里会变成四段式预览。</p>",
+        "</div>",
+      ].join("");
+    }
+
+    return [
+      '<div class="report-body">',
+      content.split(/\r?\n/).map(function (line) {
+        var trimmed = line.trim();
+        if (!trimmed) {
+          return '<div class="report-spacer"></div>';
+        }
+        if (reportSectionTitle(trimmed)) {
+          return '<h3 class="report-section-title">' + ui.escapeHtml(trimmed) + "</h3>";
+        }
+        if (trimmed.indexOf("- ") === 0) {
+          return '<p class="report-bullet">' + ui.escapeHtml(trimmed.slice(2)) + "</p>";
+        }
+        return '<p>' + ui.escapeHtml(trimmed) + "</p>";
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderReportPage(route) {
+    var typeLabel = reportTypeLabel(state.report.type);
+    var dateRange = state.report.dateRange || reportDateRange(state.report.type);
+    var disabled = state.report.loading ? " disabled" : "";
+
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(route.meta),
+      "</span></div>",
+      '<div class="report-layout">',
+      '<form class="card report-input-card" data-report-form>',
+      '<div class="files-card-head"><div><h2>这周干了啥,随便记</h2><p>复制聊天记录、待办、数据口径都可以，AI 会整理成汇报稿。</p></div></div>',
+      '<div class="field"><label for="report-type">类型</label><select class="input" id="report-type" name="type" data-report-type>',
+      '<option value="week"',
+      state.report.type === "week" ? " selected" : "",
+      ">周报</option>",
+      '<option value="day"',
+      state.report.type === "day" ? " selected" : "",
+      ">日报</option>",
+      "</select></div>",
+      '<div class="field"><label for="report-text">原始记录</label><textarea class="input report-textarea" id="report-text" name="text" placeholder="例：这周剪了 12 条素材，3 条跑出 23% 完播；周三和投放复盘，发现前 3 秒冲突还不够；下周要补女频逆袭钩子。">',
+      ui.escapeHtml(state.report.text),
+      "</textarea></div>",
+      '<div class="btn-row"><button type="button" class="btn-primary" data-action="generate-report"',
+      disabled,
+      ">",
+      ui.icon("spark"),
+      state.report.loading ? "生成中..." : "生成",
+      "</button></div>",
+      "</form>",
+      '<section class="card report-preview-card">',
+      '<div class="report-toolbar"><div><h2>',
+      ui.escapeHtml(typeLabel),
+      '</h2><p>',
+      ui.escapeHtml(dateRange),
+      '</p></div><div class="btn-row"><button type="button" class="btn-secondary" data-action="copy-report"',
+      state.report.content ? "" : " disabled",
+      '>复制</button><button type="button" class="btn-secondary" data-action="export-report"',
+      state.report.content ? "" : " disabled",
+      ">导出 .md</button></div></div>",
+      '<p class="field-help">导出文件名示例: 周报_YYYYMMDD.md</p>',
+      renderReportBody(),
+      state.report.error ? '<div class="status-box visible error">' + ui.icon("x") + "<span>" + ui.escapeHtml(state.report.error) + "</span></div>" : "",
+      "</section>",
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
   function renderCopyGenreOptions() {
     return COPY_GENRES.map(function (genre) {
       return [
@@ -1467,6 +1615,8 @@
       pageRoot.innerHTML = renderStoryboardPage(route);
     } else if (route.id === "files") {
       pageRoot.innerHTML = renderFilesPage(route);
+    } else if (route.id === "report") {
+      pageRoot.innerHTML = renderReportPage(route);
     } else {
       pageRoot.innerHTML = renderPlaceholder(route);
     }
@@ -1885,6 +2035,69 @@
     }
   }
 
+  async function handleGenerateReport() {
+    collectReportForm();
+    if (!modelReady()) {
+      return;
+    }
+    if (!state.report.text) {
+      ui.showToast("先粘贴工作记录", "error", 6000);
+      return;
+    }
+
+    var controller = new AbortController();
+    state.report.loading = true;
+    state.report.controller = controller;
+    state.report.content = "";
+    state.report.error = "";
+    state.report.dateRange = reportDateRange(state.report.type);
+    renderRoute();
+
+    try {
+      await api.generateReport({
+        text: state.report.text,
+        type: state.report.type,
+      }, {
+        onToken: function (token) {
+          state.report.content += token;
+          renderRoute();
+        },
+        onDone: function (content, event) {
+          state.report.content = content || state.report.content;
+          state.report.dateRange = event && event.dateRange ? event.dateRange : state.report.dateRange;
+          renderRoute();
+        },
+      }, controller.signal);
+      ui.showToast("报告生成完成", "success");
+    } catch (error) {
+      state.report.error = error.message || "报告生成失败";
+      ui.showToast(state.report.error, "error", 6000);
+    } finally {
+      state.report.loading = false;
+      state.report.controller = null;
+      renderRoute();
+    }
+  }
+
+  async function handleCopyReport() {
+    if (!state.report.content) {
+      ui.showToast("没有可复制的报告", "error", 4000);
+      return;
+    }
+    await exporter.copyText(state.report.content);
+    ui.showToast("报告已复制", "success");
+  }
+
+  function handleExportReport() {
+    if (!state.report.content) {
+      ui.showToast("没有可导出的报告", "error", 4000);
+      return;
+    }
+    var filename = reportFilenamePrefix(state.report.type) + "_" + exporter.dateStamp(new Date()) + ".md";
+    exporter.downloadText(filename, state.report.content, "text/markdown;charset=utf-8");
+    ui.showToast("Markdown 已导出", "success");
+  }
+
   function bindEvents() {
     document.addEventListener("submit", async function (event) {
       if (event.target.matches("[data-settings-form]")) {
@@ -1913,6 +2126,12 @@
       if (event.target.matches("[data-files-form]")) {
         event.preventDefault();
         await handlePreviewFiles();
+        return;
+      }
+
+      if (event.target.matches("[data-report-form]")) {
+        event.preventDefault();
+        await handleGenerateReport();
       }
     });
 
@@ -1931,6 +2150,10 @@
           resetFilePreview();
           renderRoute();
         }
+        return;
+      }
+      if (event.target.closest("[data-report-form]")) {
+        collectReportForm();
       }
     });
 
@@ -1948,6 +2171,15 @@
 
       if (event.target.matches("[data-storyboard-ratio]")) {
         collectStoryboardForm();
+        return;
+      }
+
+      if (event.target.matches("[data-report-type]")) {
+        collectReportForm();
+        state.report.content = "";
+        state.report.dateRange = reportDateRange(state.report.type);
+        state.report.error = "";
+        renderRoute();
         return;
       }
 
@@ -2113,6 +2345,25 @@
 
       if (action === "undo-files") {
         await handleUndoFiles();
+        return;
+      }
+
+      if (action === "generate-report") {
+        await handleGenerateReport();
+        return;
+      }
+
+      if (action === "copy-report") {
+        try {
+          await handleCopyReport();
+        } catch (error) {
+          ui.showToast(error.message || "复制失败", "error", 4000);
+        }
+        return;
+      }
+
+      if (action === "export-report") {
+        handleExportReport();
         return;
       }
 

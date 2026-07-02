@@ -1596,6 +1596,127 @@ textarea.input {
   flex: 0 0 18px;
 }
 
+.report-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.report-input-card,
+.report-preview-card {
+  padding: 22px;
+}
+
+.report-input-card {
+  display: grid;
+  gap: 16px;
+}
+
+.report-textarea {
+  min-height: 320px;
+}
+
+.report-preview-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.report-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.report-toolbar h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.report-toolbar p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.report-body {
+  display: grid;
+  gap: 9px;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.report-body p {
+  margin: 0;
+}
+
+.report-section-title {
+  margin: 16px 0 2px;
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.report-section-title:first-child {
+  margin-top: 0;
+}
+
+.report-bullet {
+  position: relative;
+  padding-left: 18px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.report-bullet::before {
+  content: "";
+  position: absolute;
+  top: .75em;
+  left: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.report-spacer {
+  height: 4px;
+}
+
+.report-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 68px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.report-empty svg {
+  width: 36px;
+  height: 36px;
+  color: var(--primary);
+}
+
+.report-empty h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.report-empty p {
+  max-width: 360px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .settings-grid {
   display: grid;
   gap: 18px;
@@ -1701,6 +1822,7 @@ textarea.input {
   .copy-layout,
   .copy-results-grid,
   .files-layout,
+  .report-layout,
   .storyboard-layout,
   .source-grid {
     grid-template-columns: 1fr;
@@ -1718,6 +1840,8 @@ textarea.input {
   .files-rule-card,
   .file-preview-card,
   .file-result-card,
+  .report-input-card,
+  .report-preview-card,
   .storyboard-form-card,
   .storyboard-table-card,
   .placeholder-card {
@@ -1730,6 +1854,7 @@ textarea.input {
   .files-path-row,
   .file-preview-row,
   .file-failure-row,
+  .report-toolbar,
   .storyboard-table-head {
     display: grid;
   }
