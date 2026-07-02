@@ -1879,3 +1879,267 @@ textarea.input {
     animation: none;
   }
 }
+
+.prompts-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.prompts-note svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.prompt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.prompt-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.prompt-card-head {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 16px 48px 16px 20px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.prompt-card-head:hover {
+  background: rgba(79, 70, 229, .04);
+}
+
+.prompt-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.prompt-card-title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.prompt-badge {
+  padding: 2px 10px;
+  border-radius: var(--radius-button);
+  background: #EEF2FF;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.prompt-usage {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.prompt-vars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.var-pill {
+  padding: 2px 10px;
+  border-radius: var(--radius-button);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.prompt-chevron {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  color: var(--muted);
+  transition: var(--transition-fast);
+}
+
+.prompt-chevron svg {
+  width: 18px;
+  height: 18px;
+  transform: rotate(90deg);
+}
+
+.prompt-card.open .prompt-chevron svg {
+  transform: rotate(-90deg);
+}
+
+.prompt-editor-wrap {
+  padding: 0 20px 18px;
+  border-top: 1px solid var(--border);
+}
+
+.prompt-editor {
+  width: 100%;
+  min-height: 280px;
+  max-height: 60vh;
+  margin: 14px 0 12px;
+  resize: vertical;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.history-list-card {
+  padding: 4px 18px;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 2px;
+  border: 0;
+  border-bottom: 1px solid #EEF2F7;
+  background: transparent;
+  text-align: left;
+  font-size: 14px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.history-row:last-child {
+  border-bottom: 0;
+}
+
+.history-row:hover {
+  padding-left: 8px;
+}
+
+.history-row:hover .history-row-title {
+  color: var(--primary);
+}
+
+.history-row-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #EEF2FF;
+  color: var(--primary);
+}
+
+.history-row-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.history-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+  transition: var(--transition-fast);
+}
+
+.history-row-meta {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.history-row-arrow {
+  display: flex;
+  color: #C7D2FE;
+}
+
+.history-row-arrow svg {
+  width: 15px;
+  height: 15px;
+}
+
+.history-detail-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.history-detail-head h2 {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+}
+
+.history-detail-meta {
+  width: 100%;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.history-detail-section {
+  margin-top: 14px;
+}
+
+.history-detail-section h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.history-line {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #EEF2F7;
+  font-size: 13px;
+}
+
+.history-line:last-child {
+  border-bottom: 0;
+}
+
+.history-line .file-arrow {
+  color: var(--primary);
+}
+
+.history-undone-badge {
+  padding: 2px 10px;
+  border-radius: var(--radius-button);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}

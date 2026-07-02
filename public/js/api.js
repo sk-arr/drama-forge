@@ -136,6 +136,36 @@
     });
   }
 
+  function getPrompts() {
+    return requestJson("/api/prompts");
+  }
+
+  function savePrompt(payload) {
+    return requestJson("/api/prompts/save", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  function resetPrompt(payload) {
+    return requestJson("/api/prompts/reset", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  function getHistory(type) {
+    var params = new URLSearchParams();
+    if (type && type !== "all") {
+      params.set("type", type);
+    }
+    return requestJson("/api/history" + (params.toString() ? "?" + params.toString() : ""));
+  }
+
+  function getHistoryDetail(id) {
+    return requestJson("/api/history/" + encodeURIComponent(id || ""));
+  }
+
   function browseFiles(dirPath) {
     var params = new URLSearchParams();
     if (dirPath) {
@@ -173,8 +203,13 @@
     generateReport: generateReport,
     generateStoryboard: generateStoryboard,
     getConfig: getConfig,
+    getHistory: getHistory,
+    getHistoryDetail: getHistoryDetail,
     getHot: getHot,
+    getPrompts: getPrompts,
+    resetPrompt: resetPrompt,
     saveConfig: saveConfig,
+    savePrompt: savePrompt,
     scanFiles: scanFiles,
     streamSse: streamSse,
     testConnection: testConnection,

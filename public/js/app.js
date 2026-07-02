@@ -136,6 +136,26 @@
       dateRange: "",
       error: "",
     },
+    prompts: {
+      loaded: false,
+      loading: false,
+      list: [],
+      error: "",
+      openName: "",
+      draft: "",
+      saving: false,
+    },
+    history: {
+      loaded: false,
+      loading: false,
+      filter: "all",
+      list: [],
+      error: "",
+      detailId: "",
+      detail: null,
+      detailLoading: false,
+      undoing: false,
+    },
   };
 
   function getTodayMeta() {
@@ -1444,6 +1464,190 @@
     ].join("");
   }
 
+  function promptByName(name) {
+    return state.prompts.list.find(function (item) {
+      return item.name === name;
+    }) || null;
+  }
+
+  function renderPromptVariablePills(variables) {
+    if (!variables || !variables.length) {
+      return "";
+    }
+    return [
+      '<div class="prompt-vars">',
+      variables.map(function (item) {
+        return [
+          '<span class="var-pill" title="',
+          ui.escapeHtml(item.desc || ""),
+          '">',
+          ui.escapeHtml(item.name),
+          "</span>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderPromptCard(item) {
+    var open = state.prompts.openName === item.name;
+    var content = open ? state.prompts.draft : item.content;
+
+    return [
+      '<section class="card prompt-card',
+      open ? " open" : "",
+      '">',
+      '<button type="button" class="prompt-card-head" data-action="toggle-prompt" data-name="',
+      ui.escapeHtml(item.name),
+      '" aria-expanded="',
+      open ? "true" : "false",
+      '">',
+      '<div class="prompt-card-title"><h2>',
+      ui.escapeHtml(item.label),
+      "</h2>",
+      item.isModified ? '<span class="prompt-badge">已自定义</span>' : "",
+      '</div>',
+      '<p class="prompt-usage">',
+      ui.escapeHtml(item.usage || item.feature),
+      "</p>",
+      renderPromptVariablePills(item.variables),
+      '<span class="prompt-chevron">',
+      ui.icon("chevron"),
+      "</span>",
+      "</button>",
+      open ? [
+        '<div class="prompt-editor-wrap">',
+        '<textarea class="input prompt-editor" data-prompt-editor spellcheck="false">',
+        ui.escapeHtml(content),
+        "</textarea>",
+        '<div class="btn-row"><button type="button" class="btn-primary" data-action="save-prompt" data-name="',
+        ui.escapeHtml(item.name),
+        '"',
+        state.prompts.saving ? " disabled" : "",
+        ">",
+        state.prompts.saving ? "保存中..." : "保存",
+        '</button><button type="button" class="btn-secondary" data-action="reset-prompt" data-name="',
+        ui.escapeHtml(item.name),
+        '"',
+        item.isModified && !state.prompts.saving ? "" : " disabled",
+        ">恢复默认</button></div>",
+        '<p class="field-help">保存立即生效；恢复默认会删除本机自定义版本。</p>',
+        "</div>",
+      ].join("") : "",
+      "</section>",
+    ].join("");
+  }
+
+  function renderPromptsPage(route) {
+    var body;
+    if (state.prompts.loading && !state.prompts.list.length) {
+      body = [
+        '<div class="card card-pad"><div class="skeleton" style="height:88px"></div></div>',
+        '<div class="card card-pad"><div class="skeleton" style="height:88px"></div></div>',
+        '<div class="card card-pad"><div class="skeleton" style="height:88px"></div></div>',
+      ].join("");
+    } else if (state.prompts.error && !state.prompts.list.length) {
+      body = [
+        '<div class="card empty-card">',
+        '<div class="empty-icon">',
+        ui.icon("prompts"),
+        '</div><h2>提示词模板读取失败</h2><p>',
+        ui.escapeHtml(state.prompts.error),
+        '</p><button type="button" class="btn-secondary" data-action="reload-prompts">重试</button></div>',
+      ].join("");
+    } else {
+      body = state.prompts.list.map(renderPromptCard).join("");
+    }
+
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(route.meta),
+      "</span></div>",
+      '<div class="prompts-note card">',
+      ui.icon("prompts"),
+      "<span>每个功能背后的提示词模板，可直接修改，保存立即生效。默认模板随仓库开源，改动只保存在本机。</span>",
+      "</div>",
+      '<div class="prompt-list">',
+      body,
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  async function loadPrompts(force) {
+    if (state.prompts.loading || (state.prompts.loaded && !force)) {
+      return;
+    }
+    state.prompts.loading = true;
+    state.prompts.error = "";
+    renderRoute();
+
+    try {
+      var payload = await api.getPrompts();
+      state.prompts.list = Array.isArray(payload.list) ? payload.list : [];
+      state.prompts.loaded = true;
+    } catch (error) {
+      state.prompts.error = error.message || "提示词模板读取失败";
+    } finally {
+      state.prompts.loading = false;
+      renderRoute();
+    }
+  }
+
+  function collectPromptDraft() {
+    var editor = document.querySelector("[data-prompt-editor]");
+    if (editor) {
+      state.prompts.draft = editor.value;
+    }
+  }
+
+  async function handleSavePrompt(name) {
+    collectPromptDraft();
+    if (!state.prompts.draft.trim()) {
+      ui.showToast("提示词内容不能为空", "error", 6000);
+      return;
+    }
+
+    state.prompts.saving = true;
+    renderRoute();
+
+    try {
+      var saved = await api.savePrompt({ name: name, content: state.prompts.draft });
+      state.prompts.list = state.prompts.list.map(function (item) {
+        return item.name === saved.name ? saved : item;
+      });
+      state.prompts.draft = saved.content;
+      ui.showToast("已保存，立即生效", "success");
+    } catch (error) {
+      ui.showToast(error.message || "保存提示词失败", "error", 6000);
+    } finally {
+      state.prompts.saving = false;
+      renderRoute();
+    }
+  }
+
+  async function handleResetPrompt(name) {
+    if (!window.confirm("恢复默认会丢弃你对这个模板的修改，确定吗？")) {
+      return;
+    }
+
+    try {
+      var restored = await api.resetPrompt({ name: name });
+      state.prompts.list = state.prompts.list.map(function (item) {
+        return item.name === restored.name ? restored : item;
+      });
+      state.prompts.draft = restored.content;
+      ui.showToast("已恢复默认模板", "success");
+    } catch (error) {
+      ui.showToast(error.message || "恢复默认失败", "error", 6000);
+    } finally {
+      renderRoute();
+    }
+  }
+
   function currentProviderValue(config) {
     var provider = config.ai.provider || "DeepSeek";
     return PROVIDER_PRESETS.some(function (preset) {
@@ -1617,6 +1821,8 @@
       pageRoot.innerHTML = renderFilesPage(route);
     } else if (route.id === "report") {
       pageRoot.innerHTML = renderReportPage(route);
+    } else if (route.id === "prompts") {
+      pageRoot.innerHTML = renderPromptsPage(route);
     } else {
       pageRoot.innerHTML = renderPlaceholder(route);
     }
@@ -1662,6 +1868,9 @@
   function handleRouteChange() {
     renderRoute();
     loadHotIfNeeded();
+    if (window.location.hash === "#/prompts") {
+      loadPrompts(false);
+    }
   }
 
   function collectSettingsForm() {
@@ -2154,6 +2363,10 @@
       }
       if (event.target.closest("[data-report-form]")) {
         collectReportForm();
+        return;
+      }
+      if (event.target.matches("[data-prompt-editor]")) {
+        state.prompts.draft = event.target.value;
       }
     });
 
@@ -2374,6 +2587,36 @@
           sellingPoint: actionTarget.getAttribute("data-logic") || "",
         }));
         window.location.hash = "#/copy";
+        return;
+      }
+
+      if (action === "toggle-prompt") {
+        collectPromptDraft();
+        var promptName = actionTarget.getAttribute("data-name") || "";
+        if (state.prompts.openName === promptName) {
+          state.prompts.openName = "";
+          state.prompts.draft = "";
+        } else {
+          var promptItem = promptByName(promptName);
+          state.prompts.openName = promptName;
+          state.prompts.draft = promptItem ? promptItem.content : "";
+        }
+        renderRoute();
+        return;
+      }
+
+      if (action === "save-prompt") {
+        await handleSavePrompt(actionTarget.getAttribute("data-name") || "");
+        return;
+      }
+
+      if (action === "reset-prompt") {
+        await handleResetPrompt(actionTarget.getAttribute("data-name") || "");
+        return;
+      }
+
+      if (action === "reload-prompts") {
+        await loadPrompts(true);
         return;
       }
 
