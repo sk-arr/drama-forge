@@ -170,3 +170,36 @@ test("tests AI connection through injected service using posted settings", async
     fs.rmSync(dataDir, { recursive: true, force: true });
   }
 });
+
+test("serves a single hot source through /api/hot", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+  const hotService = {
+    async fetchHot(sourceId, options) {
+      assert.equal(sourceId, "douyin");
+      assert.equal(options.refreshMinutes, 30);
+      assert.equal(options.force, true);
+      return {
+        source: { id: "douyin", name: "抖音" },
+        provider: "Test",
+        list: [{ rank: 1, title: "热榜", heat: "100w", cover: "", url: "" }],
+        fetchedAt: "2026-07-02T12:00:00.000Z",
+        stale: false,
+      };
+    },
+  };
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/hot?source=douyin&force=1`);
+      const body = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(body.source.id, "douyin");
+      assert.equal(body.list[0].title, "热榜");
+      assert.equal(body.stale, false);
+    }, { configStore, hotService });
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});

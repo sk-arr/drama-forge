@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const { createHotCache } = require("./lib/cache");
 const { createConfigStore, isMaskedApiKey, mergeConfig } = require("./lib/config");
 const { testAiConnection } = require("./lib/ai");
 
@@ -11,6 +12,7 @@ const PORT = 3900;
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const defaultConfigStore = createConfigStore();
+const defaultHotService = createHotCache({ dataDir: defaultConfigStore.dataDir });
 const defaultAiService = {
   testConnection(config) {
     return testAiConnection(config.ai);
@@ -77,6 +79,9 @@ function readJsonBody(req) {
 async function handleApi(req, res, pathname, services) {
   const configStore = services.configStore || defaultConfigStore;
   const aiService = services.aiService || defaultAiService;
+  const hotService = services.hotService || (configStore === defaultConfigStore
+    ? defaultHotService
+    : createHotCache({ dataDir: configStore.dataDir }));
   let body = {};
   if (req.method !== "GET" && req.method !== "HEAD") {
     try {
@@ -115,6 +120,19 @@ async function handleApi(req, res, pathname, services) {
     } catch (error) {
       sendJson(res, error.statusCode || 502, { error: error.message || "连接测试失败" });
     }
+    return;
+  }
+
+  if (pathname === "/api/hot" && req.method === "GET") {
+    const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
+    const sourceId = url.searchParams.get("source") || "douyin";
+    const force = ["1", "true", "yes"].includes(String(url.searchParams.get("force") || "").toLowerCase());
+    const config = configStore.readConfig();
+    const result = await hotService.fetchHot(sourceId, {
+      refreshMinutes: config.refreshMinutes,
+      force,
+    });
+    sendJson(res, 200, result);
     return;
   }
 
