@@ -49,13 +49,14 @@
     return requestJson("/api/hot?" + params.toString());
   }
 
-  async function generateIdeas(payload, handlers) {
-    var response = await fetch("/api/ai/ideas", {
+  async function streamSse(url, payload, handlers, signal) {
+    var response = await fetch(url, {
       method: "POST",
       headers: {
         "content-type": "application/json",
       },
       body: JSON.stringify(payload || {}),
+      signal: signal,
     });
 
     if (!response.ok) {
@@ -65,7 +66,7 @@
       } catch (error) {
         errorPayload = {};
       }
-      throw new Error(errorPayload.error || "选题生成失败");
+      throw new Error(errorPayload.error || "请求失败，请稍后重试");
     }
 
     if (!response.body || !response.body.getReader) {
@@ -92,8 +93,11 @@
       if (event.type === "done" && callbacks.onDone) {
         callbacks.onDone(event.content || "");
       }
+      if (event.type === "final" && callbacks.onFinal) {
+        callbacks.onFinal(event.result || null);
+      }
       if (event.type === "error") {
-        throw new Error(event.error || "选题生成失败");
+        throw new Error(event.error || "生成失败");
       }
     }
 
@@ -113,11 +117,29 @@
     }
   }
 
+  function generateIdeas(payload, handlers, signal) {
+    return streamSse("/api/ai/ideas", payload, handlers, signal);
+  }
+
+  function generateCopy(payload, handlers, signal) {
+    return streamSse("/api/ai/copy", payload, handlers, signal);
+  }
+
+  function generateStoryboard(payload) {
+    return requestJson("/api/ai/storyboard", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
   window.DramaForgeApi = {
+    generateCopy: generateCopy,
     generateIdeas: generateIdeas,
+    generateStoryboard: generateStoryboard,
     getConfig: getConfig,
     getHot: getHot,
     saveConfig: saveConfig,
+    streamSse: streamSse,
     testConnection: testConnection,
   };
 })();

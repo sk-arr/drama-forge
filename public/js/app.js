@@ -3,6 +3,7 @@
 
   var ui = window.DramaForgeUi;
   var api = window.DramaForgeApi;
+  var exporter = window.DramaForgeExport;
   var appRoot = document.getElementById("app");
 
   var PROVIDER_PRESETS = [
@@ -22,6 +23,21 @@
     { id: "baidu", label: "百度" },
     { id: "toutiao", label: "头条" },
     { id: "zhihu", label: "知乎" },
+  ];
+
+  var COPY_GENRES = ["女频逆袭", "男频战神", "豪门复仇", "甜宠", "悬疑反转", "家庭伦理", "其他自定义"];
+
+  var COPY_PLATFORMS = [
+    { id: "douyin", label: "抖音" },
+    { id: "kuaishou", label: "快手" },
+    { id: "weixin", label: "微信小程序" },
+  ];
+
+  var COPY_GROUPS = [
+    { key: "titles", marker: "===TITLES===", label: "标题" },
+    { key: "hooks", marker: "===HOOKS===", label: "开场钩子" },
+    { key: "intros", marker: "===INTROS===", label: "简介" },
+    { key: "tags", marker: "===TAGS===", label: "话题标签" },
   ];
 
   var DEFAULT_CONFIG = {
@@ -72,6 +88,26 @@
       ideasLoading: false,
       ideasText: "",
       ideasCards: [],
+    },
+    copy: {
+      title: "",
+      genre: "女频逆袭",
+      customGenre: "",
+      sellingPoint: "",
+      platform: "douyin",
+      loading: false,
+      controller: null,
+      rawText: "",
+      result: { titles: [], hooks: [], intros: [], tags: [] },
+      expanded: { titles: false, hooks: false, intros: false, tags: false },
+      selected: {},
+    },
+    storyboard: {
+      script: "",
+      ratio: "竖屏 9:16",
+      loading: false,
+      list: [],
+      error: "",
     },
   };
 
@@ -240,6 +276,196 @@
         genre: genre.trim(),
       };
     }).filter(Boolean).slice(0, 3);
+  }
+
+  function emptyCopyResult() {
+    return { titles: [], hooks: [], intros: [], tags: [] };
+  }
+
+  function normalizeCopyResult(result) {
+    var normalized = emptyCopyResult();
+    COPY_GROUPS.forEach(function (group) {
+      normalized[group.key] = Array.isArray(result && result[group.key])
+        ? result[group.key].map(function (item) { return String(item || "").trim(); }).filter(Boolean)
+        : [];
+    });
+    return normalized;
+  }
+
+  function copyPlatformLabel(platformId) {
+    var platform = COPY_PLATFORMS.find(function (item) {
+      return item.id === platformId;
+    });
+    return platform ? platform.label : COPY_PLATFORMS[0].label;
+  }
+
+  function copyGenreValue() {
+    if (state.copy.genre === "其他自定义") {
+      return String(state.copy.customGenre || "").trim() || "其他自定义";
+    }
+    return state.copy.genre || "女频逆袭";
+  }
+
+  function normalizeCopyLine(line) {
+    return String(line || "")
+      .replace(/^\s*(?:[-*]|\d+[\.\、\)]|[（(]\d+[）)])\s*/, "")
+      .trim();
+  }
+
+  function parseCopyStream(text) {
+    var result = emptyCopyResult();
+    var currentKey = "";
+
+    String(text || "").split(/\r?\n/).forEach(function (line) {
+      var trimmed = line.trim();
+      var matched = COPY_GROUPS.find(function (group) {
+        return trimmed.indexOf(group.marker) >= 0;
+      });
+      if (matched) {
+        currentKey = matched.key;
+        return;
+      }
+
+      if (!currentKey || !trimmed) {
+        return;
+      }
+
+      var value = normalizeCopyLine(trimmed);
+      if (!value) {
+        return;
+      }
+
+      if (currentKey === "tags") {
+        value.split(/[\s,，、]+/).map(function (tag) {
+          return tag.trim();
+        }).filter(Boolean).forEach(function (tag) {
+          result.tags.push(tag);
+        });
+        return;
+      }
+
+      result[currentKey].push(value);
+    });
+
+    return result;
+  }
+
+  function applyCopyResult(result) {
+    var normalized = normalizeCopyResult(result);
+    var liveIds = {};
+
+    COPY_GROUPS.forEach(function (group) {
+      normalized[group.key].forEach(function (text, index) {
+        var id = group.key + "-" + index;
+        liveIds[id] = true;
+        if (state.copy.selected[id] === undefined) {
+          state.copy.selected[id] = true;
+        }
+      });
+    });
+
+    Object.keys(state.copy.selected).forEach(function (id) {
+      if (!liveIds[id]) {
+        delete state.copy.selected[id];
+      }
+    });
+
+    state.copy.result = normalized;
+  }
+
+  function hydrateCopyFromSeed() {
+    var raw = "";
+    try {
+      raw = window.sessionStorage.getItem("drama-forge:copy-seed") || "";
+      if (raw) {
+        window.sessionStorage.removeItem("drama-forge:copy-seed");
+      }
+    } catch (error) {
+      raw = "";
+    }
+
+    if (!raw) {
+      return;
+    }
+
+    try {
+      var seed = JSON.parse(raw);
+      state.copy.title = seed.title || state.copy.title;
+      state.copy.sellingPoint = seed.sellingPoint || state.copy.sellingPoint;
+      if (COPY_GENRES.indexOf(seed.genre) >= 0) {
+        state.copy.genre = seed.genre;
+        state.copy.customGenre = "";
+      } else if (seed.genre) {
+        state.copy.genre = "其他自定义";
+        state.copy.customGenre = seed.genre;
+      }
+      ui.showToast("已带入首页选题参数", "success");
+    } catch (error) {
+      return;
+    }
+  }
+
+  function collectCopyForm() {
+    var form = document.querySelector("[data-copy-form]");
+    if (!form) {
+      return;
+    }
+    var data = new FormData(form);
+    state.copy.title = String(data.get("title") || "").trim();
+    state.copy.genre = String(data.get("genre") || "女频逆袭");
+    state.copy.customGenre = String(data.get("customGenre") || "").trim();
+    state.copy.sellingPoint = String(data.get("sellingPoint") || "").trim();
+  }
+
+  function collectStoryboardForm() {
+    var form = document.querySelector("[data-storyboard-form]");
+    if (!form) {
+      return;
+    }
+    var data = new FormData(form);
+    state.storyboard.script = String(data.get("script") || "").trim();
+    state.storyboard.ratio = String(data.get("ratio") || "竖屏 9:16");
+  }
+
+  function flattenCopyRows(onlySelected) {
+    var rows = [];
+    COPY_GROUPS.forEach(function (group) {
+      (state.copy.result[group.key] || []).forEach(function (text, index) {
+        var id = group.key + "-" + index;
+        if (!onlySelected || state.copy.selected[id]) {
+          rows.push({
+            id: id,
+            group: group.key,
+            groupLabel: group.label,
+            text: text,
+          });
+        }
+      });
+    });
+    return rows;
+  }
+
+  function selectedCopyRows() {
+    return flattenCopyRows(true);
+  }
+
+  function copyRowById(rowId) {
+    return flattenCopyRows(false).find(function (row) {
+      return row.id === rowId;
+    });
+  }
+
+  function hasCopyOutput() {
+    return flattenCopyRows(false).length > 0;
+  }
+
+  function modelReady() {
+    var config = mergeLocalConfig(DEFAULT_CONFIG, state.config || {});
+    if (!config.demoMode && !hasAnyKey(config)) {
+      ui.showToast("先到设置页配置 API Key", "error", 6000);
+      return false;
+    }
+    return true;
   }
 
   function renderNavItem(route) {
@@ -536,6 +762,276 @@
     ].join("");
   }
 
+  function renderCopyGenreOptions() {
+    return COPY_GENRES.map(function (genre) {
+      return [
+        '<option value="',
+        ui.escapeHtml(genre),
+        '"',
+        state.copy.genre === genre ? " selected" : "",
+        ">",
+        ui.escapeHtml(genre),
+        "</option>",
+      ].join("");
+    }).join("");
+  }
+
+  function renderPlatformPills() {
+    return [
+      '<div class="platform-pills">',
+      COPY_PLATFORMS.map(function (platform) {
+        return [
+          '<button type="button" class="pill',
+          state.copy.platform === platform.id ? " active" : "",
+          '" data-action="select-copy-platform" data-platform="',
+          platform.id,
+          '">',
+          ui.escapeHtml(platform.label),
+          "</button>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderCopyForm() {
+    var disabled = state.copy.loading ? " disabled" : "";
+    var showCustomGenre = state.copy.genre === "其他自定义";
+
+    return [
+      '<form class="card copy-form-card" data-copy-form>',
+      '<div class="copy-form-head"><div><h2>爆款文案工厂</h2><p>按平台语感生成标题、钩子、简介和话题标签。</p></div></div>',
+      '<div class="form-grid">',
+      '<div class="field"><label for="copy-title">剧名</label><input class="input" id="copy-title" name="title" value="',
+      ui.escapeHtml(state.copy.title),
+      '" placeholder="如：离婚当天我成了集团继承人" autocomplete="off"></div>',
+      '<div class="field"><label for="copy-genre">题材类型</label><select class="input" id="copy-genre" name="genre" data-copy-genre>',
+      renderCopyGenreOptions(),
+      "</select></div>",
+      showCustomGenre ? [
+        '<div class="field full"><label for="copy-custom-genre">自定义题材</label><input class="input" id="copy-custom-genre" name="customGenre" value="',
+        ui.escapeHtml(state.copy.customGenre),
+        '" placeholder="输入你的细分题材" autocomplete="off"></div>',
+      ].join("") : "",
+      '<div class="field full"><label for="copy-selling-point">剧情卖点</label><textarea class="input" id="copy-selling-point" name="sellingPoint" placeholder="写清主角身份、冲突、爽点、反转或第一集关键情节">',
+      ui.escapeHtml(state.copy.sellingPoint),
+      "</textarea></div>",
+      '<div class="field full"><span class="field-label">投放平台</span>',
+      renderPlatformPills(),
+      '<p class="field-help">当前平台: ',
+      ui.escapeHtml(copyPlatformLabel(state.copy.platform)),
+      "</p></div>",
+      '<div class="btn-row full"><button type="button" class="btn-primary" data-action="generate-copy"',
+      disabled,
+      ">",
+      ui.icon("spark"),
+      state.copy.loading ? "生成中..." : "生成文案",
+      '</button><button type="button" class="btn-secondary" data-action="stop-copy"',
+      state.copy.loading ? "" : " disabled",
+      ">停止</button></div>",
+      "</div>",
+      "</form>",
+    ].join("");
+  }
+
+  function renderCopyRow(group, text, index) {
+    var id = group.key + "-" + index;
+    var checked = state.copy.selected[id] !== false ? " checked" : "";
+    var bodyClass = group.key === "tags" ? "copy-tag" : "copy-row-text";
+
+    return [
+      '<div class="copy-row" data-copy-row="',
+      ui.escapeHtml(id),
+      '"><label class="copy-check"><input type="checkbox" data-action="toggle-copy-select" data-copy-id="',
+      ui.escapeHtml(id),
+      '"',
+      checked,
+      "></label><span class=\"",
+      bodyClass,
+      "\">",
+      ui.escapeHtml(text),
+      '</span><button type="button" class="btn-icon" title="复制这一条" data-action="copy-one" data-copy-id="',
+      ui.escapeHtml(id),
+      '">',
+      ui.icon("copy"),
+      "</button></div>",
+    ].join("");
+  }
+
+  function renderCopyGroup(group) {
+    var items = state.copy.result[group.key] || [];
+    var expanded = Boolean(state.copy.expanded[group.key]);
+    var limit = group.key === "tags" ? items.length : 3;
+    var visibleItems = expanded ? items : items.slice(0, limit);
+    var hiddenCount = Math.max(0, items.length - visibleItems.length);
+
+    return [
+      '<section class="copy-group-card">',
+      '<div class="copy-group-head"><h3>',
+      ui.escapeHtml(group.label),
+      '</h3><span>',
+      items.length,
+      " 条</span></div>",
+      items.length ? visibleItems.map(function (text, index) {
+        return renderCopyRow(group, text, index);
+      }).join("") : (
+        state.copy.loading
+          ? '<div class="copy-row"><div class="skeleton" style="height:18px;flex:1"></div></div>'
+          : '<div class="copy-empty-line">等待生成</div>'
+      ),
+      hiddenCount ? [
+        '<button type="button" class="copy-more" data-action="toggle-copy-expanded" data-copy-group="',
+        group.key,
+        '">展开其余 ',
+        hiddenCount,
+        " 条</button>",
+      ].join("") : "",
+      expanded && items.length > limit ? [
+        '<button type="button" class="copy-more" data-action="toggle-copy-expanded" data-copy-group="',
+        group.key,
+        '">收起</button>',
+      ].join("") : "",
+      "</section>",
+    ].join("");
+  }
+
+  function renderCopyResults() {
+    var selectedCount = selectedCopyRows().length;
+    var totalCount = flattenCopyRows(false).length;
+
+    return [
+      '<section class="copy-results">',
+      '<div class="copy-results-head"><div><h2>生成结果</h2><p>流式分组渲染，勾选后可复制或导出。</p></div><span>',
+      totalCount,
+      " 条</span></div>",
+      '<div class="copy-results-grid">',
+      COPY_GROUPS.map(renderCopyGroup).join(""),
+      "</div>",
+      state.copy.loading && !hasCopyOutput() ? [
+        '<div class="card card-pad copy-stream-loading">',
+        '<div class="skeleton" style="height:18px;width:78%"></div>',
+        '<div class="skeleton" style="height:18px;width:64%"></div>',
+        '<div class="skeleton" style="height:18px;width:70%"></div>',
+        "</div>",
+      ].join("") : "",
+      state.copy.rawText && !hasCopyOutput() ? '<pre class="ideas-stream">' + ui.escapeHtml(state.copy.rawText) + "</pre>" : "",
+      '<div class="copy-action-bar">',
+      '<button type="button" class="btn-secondary" data-action="copy-selected"',
+      selectedCount ? "" : " disabled",
+      ">复制选中 ",
+      selectedCount,
+      ' 条</button><button type="button" class="btn-secondary" data-action="export-copy"',
+      totalCount ? "" : " disabled",
+      ">导出 CSV</button></div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderCopyPage(route) {
+    hydrateCopyFromSeed();
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(route.meta),
+      "</span></div>",
+      '<div class="copy-layout">',
+      renderCopyForm(),
+      renderCopyResults(),
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderStoryboardRows() {
+    if (state.storyboard.loading) {
+      return Array.from({ length: 5 }).map(function () {
+        return [
+          "<tr>",
+          '<td><div class="skeleton" style="height:18px;width:42px"></div></td>',
+          '<td><div class="skeleton" style="height:18px;width:48px"></div></td>',
+          '<td><div class="skeleton" style="height:18px;width:210px"></div></td>',
+          '<td><div class="skeleton" style="height:18px;width:160px"></div></td>',
+          '<td><div class="skeleton" style="height:18px;width:38px"></div></td>',
+          "</tr>",
+        ].join("");
+      }).join("");
+    }
+
+    return state.storyboard.list.map(function (row) {
+      return [
+        "<tr>",
+        "<td>",
+        ui.escapeHtml(row.shot),
+        "</td><td>",
+        ui.escapeHtml(row.scale),
+        "</td><td>",
+        ui.escapeHtml(row.visual),
+        "</td><td>",
+        ui.escapeHtml(row.audio || ""),
+        "</td><td>",
+        ui.escapeHtml(row.duration),
+        "s</td></tr>",
+      ].join("");
+    }).join("");
+  }
+
+  function renderStoryboardPage(route) {
+    var hasRows = state.storyboard.list.length > 0;
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(route.meta),
+      "</span></div>",
+      '<div class="storyboard-layout">',
+      '<form class="card storyboard-form-card" data-storyboard-form>',
+      '<div class="copy-form-head"><div><h2>剧本转分镜</h2><p>粘贴剧本后生成可拍摄、可导出的镜头表。</p></div></div>',
+      '<div class="field"><label for="storyboard-script">剧本文本</label><textarea class="input storyboard-script" id="storyboard-script" name="script" placeholder="粘贴包含人物、动作、台词的短剧剧本">',
+      ui.escapeHtml(state.storyboard.script),
+      "</textarea></div>",
+      '<div class="field"><label for="storyboard-ratio">画幅</label><select class="input" id="storyboard-ratio" name="ratio" data-storyboard-ratio>',
+      '<option value="竖屏 9:16"',
+      state.storyboard.ratio === "竖屏 9:16" ? " selected" : "",
+      ">竖屏 9:16</option>",
+      '<option value="横屏 16:9"',
+      state.storyboard.ratio === "横屏 16:9" ? " selected" : "",
+      ">横屏 16:9</option>",
+      "</select></div>",
+      '<div class="btn-row"><button type="button" class="btn-primary" data-action="generate-storyboard"',
+      state.storyboard.loading ? " disabled" : "",
+      ">",
+      ui.icon("storyboard"),
+      state.storyboard.loading ? "生成中..." : "生成分镜",
+      "</button></div>",
+      "</form>",
+      '<section class="card storyboard-table-card">',
+      '<div class="storyboard-table-head"><div><h2>分镜表</h2><p>',
+      hasRows ? "共 " + state.storyboard.list.length + " 个镜头" : "生成后在这里整理为表格",
+      '</p></div><button type="button" class="btn-secondary" data-action="export-storyboard"',
+      hasRows ? "" : " disabled",
+      ">导出 CSV</button></div>",
+      (hasRows || state.storyboard.loading) ? [
+        '<div class="storyboard-table-wrap"><table class="storyboard-table"><thead><tr>',
+        "<th>镜号</th><th>景别</th><th>画面描述</th><th>台词/音效</th><th>时长</th>",
+        "</tr></thead><tbody>",
+        renderStoryboardRows(),
+        "</tbody></table></div>",
+      ].join("") : [
+        '<div class="storyboard-empty">',
+        ui.icon("storyboard"),
+        "<h2>还没有分镜</h2><p>输入剧本后点击生成分镜。</p>",
+        "</div>",
+      ].join(""),
+      state.storyboard.error ? '<div class="status-box visible error">' + ui.icon("x") + "<span>" + ui.escapeHtml(state.storyboard.error) + "</span></div>" : "",
+      "</section>",
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
   function currentProviderValue(config) {
     var provider = config.ai.provider || "DeepSeek";
     return PROVIDER_PRESETS.some(function (preset) {
@@ -697,9 +1193,17 @@
       navItem.classList.toggle("active", navItem.getAttribute("data-route") === route.hash);
     });
 
-    pageRoot.innerHTML = route.id === "settings"
-      ? renderSettingsPage(route)
-      : (route.id === "hot" ? renderHotPage(route) : renderPlaceholder(route));
+    if (route.id === "settings") {
+      pageRoot.innerHTML = renderSettingsPage(route);
+    } else if (route.id === "hot") {
+      pageRoot.innerHTML = renderHotPage(route);
+    } else if (route.id === "copy") {
+      pageRoot.innerHTML = renderCopyPage(route);
+    } else if (route.id === "storyboard") {
+      pageRoot.innerHTML = renderStoryboardPage(route);
+    } else {
+      pageRoot.innerHTML = renderPlaceholder(route);
+    }
     updateConnectionStatus();
   }
 
@@ -884,24 +1388,188 @@
     }
   }
 
+  async function handleGenerateCopy() {
+    collectCopyForm();
+    if (!modelReady()) {
+      return;
+    }
+    if (!state.copy.title || !state.copy.sellingPoint) {
+      ui.showToast("先填写剧名和剧情卖点", "error", 6000);
+      return;
+    }
+
+    var controller = new AbortController();
+    state.copy.loading = true;
+    state.copy.controller = controller;
+    state.copy.rawText = "";
+    state.copy.result = emptyCopyResult();
+    state.copy.selected = {};
+    state.copy.expanded = { titles: false, hooks: false, intros: false, tags: false };
+    renderRoute();
+
+    try {
+      await api.generateCopy({
+        title: state.copy.title,
+        genre: copyGenreValue(),
+        selling: state.copy.sellingPoint,
+        platform: state.copy.platform,
+      }, {
+        onToken: function (token) {
+          state.copy.rawText += token;
+          applyCopyResult(parseCopyStream(state.copy.rawText));
+          renderRoute();
+        },
+        onFinal: function (result) {
+          applyCopyResult(result || parseCopyStream(state.copy.rawText));
+          renderRoute();
+        },
+      }, controller.signal);
+      ui.showToast("文案生成完成", "success");
+    } catch (error) {
+      if (error && error.name === "AbortError") {
+        ui.showToast("已停止生成", "success");
+      } else {
+        ui.showToast((error && error.message) || "文案生成失败", "error", 6000);
+      }
+    } finally {
+      state.copy.loading = false;
+      state.copy.controller = null;
+      renderRoute();
+    }
+  }
+
+  function handleStopCopy() {
+    if (state.copy.controller) {
+      state.copy.controller.abort();
+    }
+  }
+
+  async function handleCopyOne(rowId) {
+    var row = copyRowById(rowId);
+    if (!row) {
+      ui.showToast("没有可复制的内容", "error", 4000);
+      return;
+    }
+    await exporter.copyText(row.text);
+    ui.showToast("已复制 1 条", "success");
+  }
+
+  async function handleCopySelected() {
+    var rows = selectedCopyRows();
+    if (!rows.length) {
+      ui.showToast("先勾选要复制的内容", "error", 4000);
+      return;
+    }
+    await exporter.copyText(rows.map(function (row) {
+      return row.groupLabel + "：" + row.text;
+    }).join("\n"));
+    ui.showToast("已复制选中内容", "success");
+  }
+
+  function handleExportCopy() {
+    var rows = flattenCopyRows(false);
+    if (!rows.length) {
+      ui.showToast("没有可导出的文案", "error", 4000);
+      return;
+    }
+    var csv = exporter.buildCsv(["组别", "内容"], rows.map(function (row) {
+      return [row.groupLabel, row.text];
+    }));
+    exporter.downloadText("drama-forge-copy-" + exporter.dateStamp(new Date()) + ".csv", csv, "text/csv;charset=utf-8");
+    ui.showToast("CSV 已导出", "success");
+  }
+
+  async function handleGenerateStoryboard() {
+    collectStoryboardForm();
+    if (!modelReady()) {
+      return;
+    }
+    if (!state.storyboard.script) {
+      ui.showToast("先粘贴剧本文本", "error", 6000);
+      return;
+    }
+
+    state.storyboard.loading = true;
+    state.storyboard.error = "";
+    renderRoute();
+
+    try {
+      var result = await api.generateStoryboard({
+        script: state.storyboard.script,
+        ratio: state.storyboard.ratio,
+      });
+      state.storyboard.list = Array.isArray(result.list) ? result.list : [];
+      ui.showToast("分镜生成完成", "success");
+    } catch (error) {
+      state.storyboard.error = error.message || "分镜生成失败";
+      ui.showToast(state.storyboard.error, "error", 6000);
+    } finally {
+      state.storyboard.loading = false;
+      renderRoute();
+    }
+  }
+
+  function handleExportStoryboard() {
+    if (!state.storyboard.list.length) {
+      ui.showToast("没有可导出的分镜", "error", 4000);
+      return;
+    }
+    var csv = exporter.buildCsv(["镜号", "景别", "画面描述", "台词/音效", "时长"], state.storyboard.list.map(function (row) {
+      return [row.shot, row.scale, row.visual, row.audio || "", row.duration];
+    }));
+    exporter.downloadText("drama-forge-storyboard-" + exporter.dateStamp(new Date()) + ".csv", csv, "text/csv;charset=utf-8");
+    ui.showToast("CSV 已导出", "success");
+  }
+
   function bindEvents() {
     document.addEventListener("submit", async function (event) {
-      if (!event.target.matches("[data-settings-form]")) {
+      if (event.target.matches("[data-settings-form]")) {
+        event.preventDefault();
+        state.config = collectSettingsForm();
+        try {
+          await saveState(false);
+        } catch (error) {
+          ui.showToast(error.message || "保存失败", "error", 6000);
+        }
         return;
       }
 
-      event.preventDefault();
-      state.config = collectSettingsForm();
-      try {
-        await saveState(false);
-      } catch (error) {
-        ui.showToast(error.message || "保存失败", "error", 6000);
+      if (event.target.matches("[data-copy-form]")) {
+        event.preventDefault();
+        await handleGenerateCopy();
+        return;
+      }
+
+      if (event.target.matches("[data-storyboard-form]")) {
+        event.preventDefault();
+        await handleGenerateStoryboard();
+      }
+    });
+
+    document.addEventListener("input", function (event) {
+      if (event.target.closest("[data-copy-form]")) {
+        collectCopyForm();
+        return;
+      }
+      if (event.target.closest("[data-storyboard-form]")) {
+        collectStoryboardForm();
       }
     });
 
     document.addEventListener("change", async function (event) {
       if (event.target.matches("[data-provider-select]")) {
         setProviderPreset(event.target.value);
+        return;
+      }
+
+      if (event.target.matches("[data-copy-genre]")) {
+        collectCopyForm();
+        renderRoute();
+        return;
+      }
+
+      if (event.target.matches("[data-storyboard-ratio]")) {
+        collectStoryboardForm();
         return;
       }
 
@@ -956,6 +1624,69 @@
 
       if (action === "generate-ideas") {
         await handleGenerateIdeas(actionTarget);
+        return;
+      }
+
+      if (action === "select-copy-platform") {
+        collectCopyForm();
+        state.copy.platform = actionTarget.getAttribute("data-platform") || "douyin";
+        renderRoute();
+        return;
+      }
+
+      if (action === "generate-copy") {
+        await handleGenerateCopy();
+        return;
+      }
+
+      if (action === "stop-copy") {
+        handleStopCopy();
+        return;
+      }
+
+      if (action === "toggle-copy-expanded") {
+        var copyGroup = actionTarget.getAttribute("data-copy-group");
+        state.copy.expanded[copyGroup] = !state.copy.expanded[copyGroup];
+        renderRoute();
+        return;
+      }
+
+      if (action === "toggle-copy-select") {
+        state.copy.selected[actionTarget.getAttribute("data-copy-id")] = Boolean(actionTarget.checked);
+        renderRoute();
+        return;
+      }
+
+      if (action === "copy-one") {
+        try {
+          await handleCopyOne(actionTarget.getAttribute("data-copy-id"));
+        } catch (error) {
+          ui.showToast(error.message || "复制失败", "error", 4000);
+        }
+        return;
+      }
+
+      if (action === "copy-selected") {
+        try {
+          await handleCopySelected();
+        } catch (error) {
+          ui.showToast(error.message || "复制失败", "error", 4000);
+        }
+        return;
+      }
+
+      if (action === "export-copy") {
+        handleExportCopy();
+        return;
+      }
+
+      if (action === "generate-storyboard") {
+        await handleGenerateStoryboard();
+        return;
+      }
+
+      if (action === "export-storyboard") {
+        handleExportStoryboard();
         return;
       }
 
