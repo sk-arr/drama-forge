@@ -64,6 +64,15 @@
   var state = {
     config: null,
     testStatus: null,
+    hot: {
+      source: "",
+      loading: false,
+      data: null,
+      error: "",
+      ideasLoading: false,
+      ideasText: "",
+      ideasCards: [],
+    },
   };
 
   function getTodayMeta() {
@@ -130,6 +139,107 @@
 
   function hasAnyKey(config) {
     return Boolean(config && config.ai && config.ai.apiKey);
+  }
+
+  function enabledHotSources(config) {
+    var merged = mergeLocalConfig(DEFAULT_CONFIG, config || {});
+    var enabled = HOT_SOURCES.filter(function (source) {
+      return Boolean(merged.sources && merged.sources[source.id]);
+    });
+    return enabled.length ? enabled : HOT_SOURCES.slice(0, 1);
+  }
+
+  function hotSourceById(sourceId) {
+    return HOT_SOURCES.find(function (source) {
+      return source.id === sourceId;
+    }) || HOT_SOURCES[0];
+  }
+
+  function readLastHotSource() {
+    try {
+      return window.localStorage.getItem("drama-forge:hot-source") || "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function writeLastHotSource(sourceId) {
+    try {
+      window.localStorage.setItem("drama-forge:hot-source", sourceId);
+    } catch (error) {
+      return;
+    }
+  }
+
+  function ensureHotSource() {
+    var enabled = enabledHotSources(state.config);
+    var selected = state.hot.source || readLastHotSource();
+    if (!enabled.some(function (source) { return source.id === selected; })) {
+      selected = enabled[0].id;
+    }
+    state.hot.source = selected;
+    writeLastHotSource(selected);
+    return selected;
+  }
+
+  function minutesAgoText(isoText) {
+    if (!isoText) {
+      return "尚未更新";
+    }
+    var diffMs = Date.now() - Date.parse(isoText);
+    if (!Number.isFinite(diffMs) || diffMs < 0) {
+      return "刚刚更新";
+    }
+    var minutes = Math.max(1, Math.round(diffMs / 60000));
+    if (minutes < 60) {
+      return minutes + " 分钟前更新";
+    }
+    return Math.round(minutes / 60) + " 小时前更新";
+  }
+
+  function staleCacheText(isoText) {
+    if (!isoText) {
+      return "使用旧缓存";
+    }
+    var diffMs = Date.now() - Date.parse(isoText);
+    var hours = Math.max(1, Math.round(diffMs / 3600000));
+    return "使用 " + hours + " 小时前缓存";
+  }
+
+  function searchUrlFor(sourceId, title) {
+    var keyword = encodeURIComponent(title || "");
+    var templates = {
+      douyin: "https://www.douyin.com/search/" + keyword,
+      kuaishou: "https://www.kuaishou.com/search/video?searchKey=" + keyword,
+      weibo: "https://s.weibo.com/weibo?q=" + keyword,
+      bilibili: "https://search.bilibili.com/all?keyword=" + keyword,
+      xiaohongshu: "https://www.xiaohongshu.com/search_result?keyword=" + keyword,
+      baidu: "https://www.baidu.com/s?wd=" + keyword,
+      toutiao: "https://so.toutiao.com/search?keyword=" + keyword,
+      zhihu: "https://www.zhihu.com/search?type=content&q=" + keyword,
+      duanju: "https://www.douyin.com/search/" + keyword,
+    };
+    return templates[sourceId] || templates.baidu;
+  }
+
+  function itemUrl(sourceId, item) {
+    return item && item.url ? item.url : searchUrlFor(sourceId, item && item.title);
+  }
+
+  function parseIdeaCards(text) {
+    return String(text || "").split(/\n(?=\d+\.\s*题目[:：])/).map(function (block) {
+      var title = (block.match(/题目[:：]\s*(.+)/) || [])[1] || "";
+      var logic = (block.match(/一句话逻辑[:：]\s*(.+)/) || [])[1] || "";
+      var genre = (block.match(/适配题材[:：]\s*(.+)/) || [])[1] || "其他自定义";
+      if (!title.trim()) {
+        return null;
+      }
+      return {
+        title: title.trim(),
+        logic: logic.trim(),
+        genre: genre.trim(),
+      };
+    }).filter(Boolean).slice(0, 3);
   }
 
   function renderNavItem(route) {
@@ -208,6 +318,28 @@
   }
 
   function renderPlaceholder(route) {
+    var seedHtml = "";
+    if (route.id === "copy") {
+      try {
+        var seed = JSON.parse(window.sessionStorage.getItem("drama-forge:copy-seed") || "null");
+        if (seed) {
+          seedHtml = [
+            '<div class="seed-preview">',
+            '<div class="seed-title">已收到首页选题参数</div>',
+            '<div class="seed-row">剧名建议: ',
+            ui.escapeHtml(seed.title || ""),
+            '</div><div class="seed-row">题材: ',
+            ui.escapeHtml(seed.genre || ""),
+            '</div><div class="seed-row">卖点: ',
+            ui.escapeHtml(seed.sellingPoint || ""),
+            "</div></div>",
+          ].join("");
+        }
+      } catch (error) {
+        seedHtml = "";
+      }
+    }
+
     return [
       '<section class="page-view">',
       '<div class="page-head">',
@@ -226,7 +358,180 @@
       ui.escapeHtml(route.stage),
       " · 此页先保留页面入口与视觉骨架，具体功能将在对应阶段实现。",
       "</p>",
+      seedHtml,
       "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderHotSkeleton() {
+    return [
+      '<div class="hot-top-grid">',
+      '<div class="card card-pad"><div class="skeleton" style="height:110px"></div></div>',
+      '<div class="card card-pad"><div class="skeleton" style="height:110px"></div></div>',
+      '<div class="card card-pad"><div class="skeleton" style="height:110px"></div></div>',
+      "</div>",
+      '<div class="hot-list-card card">',
+      Array.from({ length: 7 }).map(function () {
+        return '<div class="hot-list-row"><div class="skeleton" style="width:22px;height:18px"></div><div class="skeleton" style="height:18px;flex:1"></div><div class="skeleton" style="width:58px;height:18px"></div></div>';
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderSourceToolbar(selectedSource) {
+    var enabled = enabledHotSources(state.config);
+    return [
+      '<div class="hot-toolbar">',
+      '<div class="hot-pills">',
+      enabled.map(function (source) {
+        return [
+          '<button type="button" class="pill',
+          source.id === selectedSource ? " active" : "",
+          '" data-action="select-hot-source" data-source="',
+          source.id,
+          '">',
+          ui.escapeHtml(source.label),
+          "</button>",
+        ].join("");
+      }).join(""),
+      "</div>",
+      '<button type="button" class="btn-secondary hot-refresh" data-action="refresh-hot">',
+      ui.icon("trend"),
+      "刷新</button>",
+      "</div>",
+    ].join("");
+  }
+
+  function renderTopCards(list, sourceId) {
+    var topLabels = ["TOP 1", "TOP 2", "TOP 3"];
+    return [
+      '<div class="hot-top-grid">',
+      list.slice(0, 3).map(function (item, index) {
+        var coverClass = "c" + ((index % 3) + 1);
+        var style = item.cover ? ' style="background-image:url(' + ui.escapeHtml(item.cover) + ')"' : "";
+        return [
+          '<a class="hot-card" href="',
+          ui.escapeHtml(itemUrl(sourceId, item)),
+          '" target="_blank" rel="noreferrer">',
+          '<div class="hot-cover ',
+          coverClass,
+          item.cover ? " has-image" : "",
+          '"',
+          style,
+          '><span class="rank-badge">',
+          ui.escapeHtml(topLabels[index]),
+          '</span><span class="play">',
+          ui.icon("chevron"),
+          "</span></div>",
+          '<div class="hot-title">',
+          ui.escapeHtml(item.title),
+          '</div><div class="hot-meta">',
+          ui.escapeHtml(item.heat || "热度上升"),
+          " · 点击看视频</div></a>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderListRows(list, sourceId) {
+    return [
+      '<div class="hot-list-card card">',
+      list.slice(3, 10).map(function (item) {
+        return [
+          '<a class="hot-list-row" href="',
+          ui.escapeHtml(itemUrl(sourceId, item)),
+          '" target="_blank" rel="noreferrer">',
+          '<span class="row-rank">',
+          ui.escapeHtml(item.rank),
+          '</span><span class="row-title">',
+          ui.escapeHtml(item.title),
+          '</span><span class="row-heat">',
+          ui.escapeHtml(item.heat || ""),
+          '</span><span class="row-arrow">',
+          ui.icon("chevron"),
+          "</span></a>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderIdeasArea() {
+    var cards = state.hot.ideasCards;
+    var text = state.hot.ideasText;
+    var disabled = state.hot.ideasLoading ? " disabled" : "";
+
+    return [
+      '<div class="ai-card">',
+      '<div class="ai-inner">',
+      '<div class="ai-orb">',
+      ui.icon("spark"),
+      '</div><div class="ai-copy"><div class="ai-title">AI 选题灵感</div>',
+      '<div class="ai-desc">基于当前榜单提炼趋势,生成可带入文案工厂的短剧选题。</div></div>',
+      '<button type="button" class="btn-primary" data-action="generate-ideas"',
+      disabled,
+      ">",
+      ui.icon("spark"),
+      state.hot.ideasLoading ? "生成中..." : "生成 3 个选题",
+      "</button></div>",
+      text ? '<pre class="ideas-stream">' + ui.escapeHtml(text) + "</pre>" : "",
+      cards.length ? [
+        '<div class="idea-grid">',
+        cards.map(function (card) {
+          return [
+            '<div class="idea-card">',
+            '<h3>',
+            ui.escapeHtml(card.title),
+            '</h3><p>',
+            ui.escapeHtml(card.logic),
+            '</p><div class="idea-foot"><span>',
+            ui.escapeHtml(card.genre),
+            '</span><button type="button" class="btn-secondary" data-action="go-copy" data-title="',
+            ui.escapeHtml(card.title),
+            '" data-genre="',
+            ui.escapeHtml(card.genre),
+            '" data-logic="',
+            ui.escapeHtml(card.logic),
+            '">去生成文案</button></div></div>',
+          ].join("");
+        }).join(""),
+        "</div>",
+      ].join("") : "",
+      "</div>",
+    ].join("");
+  }
+
+  function renderHotPage(route) {
+    var selectedSource = ensureHotSource();
+    var data = state.hot.data;
+    var list = data && Array.isArray(data.list) ? data.list : [];
+    var meta = data && data.fetchedAt ? minutesAgoText(data.fetchedAt) : getTodayMeta();
+    var stale = data && data.stale;
+    var note = data && data.note ? data.note : "";
+
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(meta),
+      "</span></div>",
+      renderSourceToolbar(selectedSource),
+      stale ? '<div class="cache-note">' + ui.escapeHtml(staleCacheText(data.fetchedAt)) + "</div>" : "",
+      note ? '<div class="cache-note">' + ui.escapeHtml(note) + "</div>" : "",
+      state.hot.loading ? renderHotSkeleton() : "",
+      !state.hot.loading && list.length ? renderTopCards(list, selectedSource) + renderListRows(list, selectedSource) : "",
+      !state.hot.loading && !list.length ? [
+        '<div class="card empty-card">',
+        '<div class="empty-icon">',
+        ui.icon("trend"),
+        '</div><h2>该来源暂不可用</h2><p>',
+        ui.escapeHtml((data && data.error) || state.hot.error || "热点源暂不可用"),
+        '</p><button type="button" class="btn-secondary" data-action="refresh-hot">重试</button></div>',
+      ].join("") : "",
+      renderIdeasArea(),
       "</section>",
     ].join("");
   }
@@ -392,8 +697,51 @@
       navItem.classList.toggle("active", navItem.getAttribute("data-route") === route.hash);
     });
 
-    pageRoot.innerHTML = route.id === "settings" ? renderSettingsPage(route) : renderPlaceholder(route);
+    pageRoot.innerHTML = route.id === "settings"
+      ? renderSettingsPage(route)
+      : (route.id === "hot" ? renderHotPage(route) : renderPlaceholder(route));
     updateConnectionStatus();
+  }
+
+  function loadHotIfNeeded() {
+    if (window.location.hash !== "#/hot" || !state.config) {
+      return;
+    }
+    var sourceId = ensureHotSource();
+    if (!state.hot.loading && (!state.hot.data || !state.hot.data.source || state.hot.data.source.id !== sourceId)) {
+      loadHot(false);
+    }
+  }
+
+  async function loadHot(force) {
+    var sourceId = ensureHotSource();
+    state.hot.loading = true;
+    state.hot.error = "";
+    if (force) {
+      state.hot.data = null;
+    }
+    renderRoute();
+
+    try {
+      state.hot.data = await api.getHot(sourceId, { force: Boolean(force) });
+      state.hot.error = state.hot.data.error || "";
+    } catch (error) {
+      state.hot.data = {
+        source: { id: sourceId, name: hotSourceById(sourceId).label },
+        list: [],
+        stale: false,
+        error: error.message || "热点源暂不可用",
+      };
+      state.hot.error = state.hot.data.error;
+    } finally {
+      state.hot.loading = false;
+      renderRoute();
+    }
+  }
+
+  function handleRouteChange() {
+    renderRoute();
+    loadHotIfNeeded();
   }
 
   function collectSettingsForm() {
@@ -431,6 +779,7 @@
     }
     updateConnectionStatus();
     renderRoute();
+    loadHotIfNeeded();
   }
 
   function setProviderPreset(value) {
@@ -484,6 +833,53 @@
         button.disabled = false;
       }
       updateConnectionStatus();
+      renderRoute();
+    }
+  }
+
+  async function handleGenerateIdeas(button) {
+    var config = mergeLocalConfig(DEFAULT_CONFIG, state.config || {});
+    if (!config.demoMode && !hasAnyKey(config)) {
+      ui.showToast("先到设置页配置 API Key", "error", 6000);
+      return;
+    }
+
+    var data = state.hot.data;
+    var list = data && Array.isArray(data.list) ? data.list.slice(0, 10) : [];
+    if (!list.length) {
+      ui.showToast("当前榜单为空，先刷新一个可用来源", "error", 6000);
+      return;
+    }
+
+    state.hot.ideasLoading = true;
+    state.hot.ideasText = "";
+    state.hot.ideasCards = [];
+    renderRoute();
+
+    try {
+      await api.generateIdeas({
+        source: state.hot.source,
+        sourceName: hotSourceById(state.hot.source).label,
+        list: list,
+      }, {
+        onToken: function (token) {
+          state.hot.ideasText += token;
+          renderRoute();
+        },
+        onDone: function () {
+          state.hot.ideasCards = parseIdeaCards(state.hot.ideasText);
+          renderRoute();
+        },
+      });
+      state.hot.ideasCards = parseIdeaCards(state.hot.ideasText);
+      ui.showToast("选题生成完成", "success");
+    } catch (error) {
+      ui.showToast(error.message || "选题生成失败", "error", 6000);
+    } finally {
+      state.hot.ideasLoading = false;
+      if (button) {
+        button.disabled = false;
+      }
       renderRoute();
     }
   }
@@ -543,6 +939,36 @@
         return;
       }
 
+      if (action === "select-hot-source") {
+        state.hot.source = actionTarget.getAttribute("data-source") || "douyin";
+        writeLastHotSource(state.hot.source);
+        state.hot.data = null;
+        state.hot.ideasText = "";
+        state.hot.ideasCards = [];
+        await loadHot(false);
+        return;
+      }
+
+      if (action === "refresh-hot") {
+        await loadHot(true);
+        return;
+      }
+
+      if (action === "generate-ideas") {
+        await handleGenerateIdeas(actionTarget);
+        return;
+      }
+
+      if (action === "go-copy") {
+        window.sessionStorage.setItem("drama-forge:copy-seed", JSON.stringify({
+          title: actionTarget.getAttribute("data-title") || "",
+          genre: actionTarget.getAttribute("data-genre") || "其他自定义",
+          sellingPoint: actionTarget.getAttribute("data-logic") || "",
+        }));
+        window.location.hash = "#/copy";
+        return;
+      }
+
       if (action === "toggle-demo" && state.config) {
         state.config.demoMode = !state.config.demoMode;
         try {
@@ -574,7 +1000,7 @@
 
     renderShell();
     bindEvents();
-    window.addEventListener("hashchange", renderRoute);
+    window.addEventListener("hashchange", handleRouteChange);
     if (!window.location.hash) {
       window.location.hash = "#/hot";
     } else {
