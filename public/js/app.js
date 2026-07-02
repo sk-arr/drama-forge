@@ -17,7 +17,7 @@
     { id: "douyin", label: "抖音" },
     { id: "kuaishou", label: "快手" },
     { id: "weibo", label: "微博" },
-    { id: "duanju", label: "短剧榜" },
+    { id: "duanju", label: "红果短剧" },
     { id: "xiaohongshu", label: "小红书" },
     { id: "bilibili", label: "B站" },
     { id: "baidu", label: "百度" },
@@ -304,7 +304,7 @@
       baidu: "https://www.baidu.com/s?wd=" + keyword,
       toutiao: "https://so.toutiao.com/search?keyword=" + keyword,
       zhihu: "https://www.zhihu.com/search?type=content&q=" + keyword,
-      duanju: "https://www.douyin.com/search/" + keyword,
+      duanju: "https://www.baidu.com/s?wd=" + keyword + "%20%E7%BA%A2%E6%9E%9C%E7%9F%AD%E5%89%A7",
     };
     return templates[sourceId] || templates.baidu;
   }

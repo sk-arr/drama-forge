@@ -24,6 +24,7 @@ test("hot page renders required sections and states", () => {
   [
     "renderHotPage",
     "TOP 1",
+    "红果短剧",
     "AI 选题灵感",
     "生成 3 个选题",
     "该来源暂不可用",
