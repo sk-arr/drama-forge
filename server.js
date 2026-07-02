@@ -5,7 +5,16 @@ const http = require("node:http");
 const path = require("node:path");
 const { createHotCache } = require("./lib/cache");
 const { createConfigStore, isMaskedApiKey, mergeConfig } = require("./lib/config");
-const { loadPrompt, renderPrompt, streamChatCompletion, testAiConnection } = require("./lib/ai");
+const { chatCompletion, loadPrompt, renderPrompt, streamChatCompletion, testAiConnection } = require("./lib/ai");
+const {
+  copyHistoryTitle,
+  parseCopyOutput,
+  parseStoryboardJson,
+  platformLabel,
+  platformPromptName,
+  storyboardHistoryTitle,
+} = require("./lib/generation");
+const { createHistoryStore } = require("./lib/history");
 
 const HOST = "127.0.0.1";
 const PORT = 3900;
@@ -13,6 +22,7 @@ const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
 const defaultConfigStore = createConfigStore();
 const defaultHotService = createHotCache({ dataDir: defaultConfigStore.dataDir });
+const defaultHistoryStore = createHistoryStore({ dataDir: defaultConfigStore.dataDir });
 const defaultAiService = {
   testConnection(config) {
     return testAiConnection(config.ai);
@@ -25,6 +35,24 @@ const defaultAiService = {
       temperature: 0.9,
       maxTokens: 900,
     }, options);
+  },
+  streamCopy(config, payload, options) {
+    return streamChatCompletion(config.ai, {
+      messages: [
+        { role: "user", content: payload.prompt },
+      ],
+      temperature: 0.9,
+      maxTokens: 1600,
+    }, options);
+  },
+  storyboard(config, payload) {
+    return chatCompletion(config.ai, {
+      messages: [
+        { role: "user", content: payload.prompt },
+      ],
+      temperature: 0.3,
+      maxTokens: 1800,
+    }, { timeoutMs: 60000 });
   },
 };
 
@@ -92,6 +120,97 @@ function buildIdeasPrompt(body, configStore) {
   });
 }
 
+function buildCopyPrompt(body, configStore) {
+  const templateName = platformPromptName(body.platform);
+  const template = loadPrompt(templateName, {
+    rootDir: ROOT_DIR,
+    dataDir: configStore.dataDir,
+  });
+  return renderPrompt(template, {
+    "剧名": body.title || "",
+    "题材": body.genre || "",
+    "卖点": body.selling || "",
+  });
+}
+
+function buildStoryboardPrompt(body, configStore) {
+  const template = loadPrompt("storyboard", {
+    rootDir: ROOT_DIR,
+    dataDir: configStore.dataDir,
+  });
+  return renderPrompt(template, {
+    "剧本": body.script || "",
+    "画幅": body.ratio || "竖屏 9:16",
+  });
+}
+
+function demoCopyOutput(platform) {
+  if (platform === "kuaishou") {
+    return [
+      "===TITLES===",
+      "- 老铁别眨眼，她真不是普通保洁",
+      "- 这一巴掌，替她憋屈了三年",
+      "- 全公司笑她穷，下一秒都慌了",
+      "===HOOKS===",
+      "- 谁懂啊，她刚拖完地就被董事会点名了",
+      "- 老铁你看完再骂，她真有苦衷",
+      "- 别欺负老实人，这次她要讨回公道",
+      "===INTROS===",
+      "- 被羞辱的保洁阿姨转身亮出身份，替自己讨回尊严。",
+      "- 她忍了三年，只为等到今天让真相大白。",
+      "- 一场公司大会，把所有看不起她的人都打醒了。",
+      "===TAGS===",
+      "- #短剧 #快手短剧 #女频逆袭 #身份反转 #老铁追剧 #打脸 #爽文 #家庭情感",
+    ].join("\n");
+  }
+
+  if (platform === "weixin" || platform === "微信小程序") {
+    return [
+      "===TITLES===",
+      "- 保洁阿姨被逼离职后，总裁身份藏不住了",
+      "- 她替女儿忍辱三年，终于等来翻身那一刻",
+      "- 全公司都在等她出丑，只有董事长知道真相",
+      "===HOOKS===",
+      "- 她只是来打扫办公室，却被亲手赶出自己公司",
+      "- 女儿病危那晚，她决定不再隐藏身份",
+      "- 看不起她的人不知道，下一集她就要收回集团",
+      "===INTROS===",
+      "- 林晚为保护女儿隐藏总裁身份，却在被羞辱后不得不重回董事会，继续看她如何一步步夺回公司。",
+      "- 一张离职单牵出十年前的股权秘密，她的反击才刚开始。",
+      "- 她不是没人撑腰，她自己就是最大的靠山。下一集,她将亲手揭开背叛者。",
+      "===TAGS===",
+      "- #短剧 #微信短剧 #女频逆袭 #追剧 #付费短剧 #身份反转 #都市情感 #爽剧",
+    ].join("\n");
+  }
+
+  return [
+    "===TITLES===",
+    "- 保洁阿姨摊牌那一刻",
+    "- 全公司都跪着叫她总裁",
+    "- 她扫的不是地，是全场脸面",
+    "===HOOKS===",
+    "- 别叫我阿姨，叫我董事长",
+    "- 她刚被开除，集团印章就送到了",
+    "- 所有人都笑她穷，下一秒笑不出来了",
+    "===INTROS===",
+    "- 被羞辱的保洁阿姨亮出真实身份，反手收回整家公司。",
+    "- 她忍辱三年，只为查清丈夫背叛的真相。",
+    "- 一场会议，让所有看不起她的人当场道歉。",
+    "===TAGS===",
+    "- #短剧 #抖音短剧 #女频逆袭 #身份反转 #打脸 #爽剧 #总裁 #追剧",
+  ].join("\n");
+}
+
+function demoStoryboardList() {
+  return [
+    { shot: 1, scale: "近景", visual: "林晚穿着保洁服推开会议室门,手里还拿着拖把。", audio: "门轴轻响,会议室瞬间安静。", duration: 3 },
+    { shot: 2, scale: "中景", visual: "主管挡在她面前,把离职单拍到桌上。", audio: "主管: 这里不是你该来的地方。", duration: 4 },
+    { shot: 3, scale: "特写", visual: "林晚低头看离职单,指尖慢慢攥紧。", audio: "纸张被捏皱的声音。", duration: 3 },
+    { shot: 4, scale: "近景", visual: "董事会秘书快步进门,双手递上集团印章。", audio: "秘书: 林总,董事会都在等您。", duration: 4 },
+    { shot: 5, scale: "特写", visual: "主管脸色瞬间僵住,离职单从手里滑落。", audio: "离职单落地声。", duration: 2 },
+  ];
+}
+
 async function streamDemoIdeas(res) {
   const chunks = [
     "1. 题目: 保洁阿姨的总裁局\n   一句话逻辑: 借用身份反差热度,把低姿态职业与高权力身份放进开场反转。\n   适配题材: 女频逆袭\n",
@@ -140,6 +259,9 @@ function readJsonBody(req) {
 async function handleApi(req, res, pathname, services) {
   const configStore = services.configStore || defaultConfigStore;
   const aiService = services.aiService || defaultAiService;
+  const historyStore = services.historyStore || (configStore === defaultConfigStore
+    ? defaultHistoryStore
+    : createHistoryStore({ dataDir: configStore.dataDir }));
   const hotService = services.hotService || (configStore === defaultConfigStore
     ? defaultHotService
     : createHotCache({ dataDir: configStore.dataDir }));
@@ -214,6 +336,88 @@ async function handleApi(req, res, pathname, services) {
     } catch (error) {
       writeSse(res, { type: "error", error: error.message || "选题生成失败" });
       res.end();
+    }
+    return;
+  }
+
+  if (pathname === "/api/ai/copy" && req.method === "POST") {
+    const config = configStore.readConfig();
+    if (!config.demoMode && !(config.ai && config.ai.apiKey)) {
+      sendJson(res, 400, { error: "先到设置页配置 API Key" });
+      return;
+    }
+
+    sendSseHead(res);
+
+    try {
+      let content = "";
+      if (config.demoMode) {
+        content = demoCopyOutput(body.platform);
+        for (const chunk of content.split(/(?=\n===|\n- )/)) {
+          if (chunk) {
+            writeSse(res, { type: "token", token: chunk });
+          }
+        }
+      } else {
+        const prompt = buildCopyPrompt(body, configStore);
+        content = await aiService.streamCopy(config, {
+          prompt,
+          input: body,
+        }, {
+          onToken(token) {
+            writeSse(res, { type: "token", token });
+          },
+        });
+      }
+
+      const parsed = parseCopyOutput(content);
+      historyStore.save("copy", copyHistoryTitle(body), body, parsed);
+      writeSse(res, { type: "final", result: parsed });
+      res.end();
+    } catch (error) {
+      writeSse(res, { type: "error", error: error.message || "文案生成失败" });
+      res.end();
+    }
+    return;
+  }
+
+  if (pathname === "/api/ai/storyboard" && req.method === "POST") {
+    const config = configStore.readConfig();
+    if (!config.demoMode && !(config.ai && config.ai.apiKey)) {
+      sendJson(res, 400, { error: "先到设置页配置 API Key" });
+      return;
+    }
+
+    try {
+      let list;
+      if (config.demoMode) {
+        list = demoStoryboardList();
+      } else {
+        const prompt = buildStoryboardPrompt(body, configStore);
+        let lastError = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const raw = await aiService.storyboard(config, {
+              prompt,
+              input: body,
+              attempt: attempt + 1,
+            });
+            list = parseStoryboardJson(raw);
+            lastError = null;
+            break;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        if (lastError) {
+          throw lastError;
+        }
+      }
+
+      historyStore.save("storyboard", storyboardHistoryTitle(body), body, list);
+      sendJson(res, 200, { list });
+    } catch (error) {
+      sendJson(res, 502, { error: error.message || "分镜生成失败" });
     }
     return;
   }
