@@ -592,6 +592,23 @@
     ].indexOf(String(line || "").trim()) >= 0;
   }
 
+  var pendingStreamUpdates = {};
+
+  function scheduleStreamUpdate(key, updater) {
+    if (pendingStreamUpdates[key]) {
+      return;
+    }
+
+    var run = function () {
+      pendingStreamUpdates[key] = 0;
+      updater();
+    };
+
+    pendingStreamUpdates[key] = window.requestAnimationFrame
+      ? window.requestAnimationFrame(run)
+      : window.setTimeout(run, 50);
+  }
+
   function renderNavItem(route) {
     return [
       '<a class="nav-item" href="',
@@ -826,7 +843,7 @@
       ui.icon("spark"),
       state.hot.ideasLoading ? "生成中..." : "生成 3 个选题",
       "</button></div>",
-      text ? '<pre class="ideas-stream">' + ui.escapeHtml(text) + "</pre>" : "",
+      (text || state.hot.ideasLoading) ? '<pre class="ideas-stream" data-ideas-stream>' + ui.escapeHtml(text) + "</pre>" : "",
       cards.length ? [
         '<div class="idea-grid">',
         cards.map(function (card) {
@@ -884,6 +901,22 @@
       renderIdeasArea(),
       "</section>",
     ].join("");
+  }
+
+  function updateIdeasArea() {
+    var card = document.querySelector(".ai-card");
+    if (card) {
+      card.outerHTML = renderIdeasArea();
+    }
+  }
+
+  function updateIdeasStreamText() {
+    var stream = document.querySelector("[data-ideas-stream]");
+    if (stream) {
+      stream.textContent = state.hot.ideasText;
+      return;
+    }
+    updateIdeasArea();
   }
 
   function renderFilesRulePills() {
@@ -1142,19 +1175,10 @@
     ].join("");
   }
 
-  function renderReportPage(route) {
-    var typeLabel = reportTypeLabel(state.report.type);
-    var dateRange = state.report.dateRange || reportDateRange(state.report.type);
+  function renderReportFormCard() {
     var disabled = state.report.loading ? " disabled" : "";
 
     return [
-      '<section class="page-view">',
-      '<div class="page-head"><h1 class="page-title">',
-      route.title,
-      '</h1><span class="page-meta">',
-      ui.escapeHtml(route.meta),
-      "</span></div>",
-      '<div class="report-layout">',
       '<form class="card report-input-card" data-report-form>',
       '<div class="files-card-head"><div><h2>这周干了啥,随便记</h2><p>复制聊天记录、待办、数据口径都可以，AI 会整理成汇报稿。</p></div></div>',
       '<div class="field"><label for="report-type">类型</label><select class="input" id="report-type" name="type" data-report-type>',
@@ -1175,6 +1199,14 @@
       state.report.loading ? "生成中..." : "生成",
       "</button></div>",
       "</form>",
+    ].join("");
+  }
+
+  function renderReportPreviewCard() {
+    var typeLabel = reportTypeLabel(state.report.type);
+    var dateRange = state.report.dateRange || reportDateRange(state.report.type);
+
+    return [
       '<section class="card report-preview-card">',
       '<div class="report-toolbar"><div><h2>',
       ui.escapeHtml(typeLabel),
@@ -1189,9 +1221,38 @@
       renderReportBody(),
       state.report.error ? '<div class="status-box visible error">' + ui.icon("x") + "<span>" + ui.escapeHtml(state.report.error) + "</span></div>" : "",
       "</section>",
+    ].join("");
+  }
+
+  function renderReportPage(route) {
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(route.meta),
+      "</span></div>",
+      '<div class="report-layout">',
+      renderReportFormCard(),
+      renderReportPreviewCard(),
       "</div>",
       "</section>",
     ].join("");
+  }
+
+  function updateReportPreviewRegion() {
+    var preview = document.querySelector(".report-preview-card");
+    if (preview) {
+      preview.outerHTML = renderReportPreviewCard();
+    }
+  }
+
+  function updateReportPageRegions() {
+    var form = document.querySelector("[data-report-form]");
+    if (form) {
+      form.outerHTML = renderReportFormCard();
+    }
+    updateReportPreviewRegion();
   }
 
   function renderCopyGenreOptions() {
@@ -1374,6 +1435,21 @@
       "</div>",
       "</section>",
     ].join("");
+  }
+
+  function updateCopyResultsRegion() {
+    var results = document.querySelector(".copy-results");
+    if (results) {
+      results.outerHTML = renderCopyResults();
+    }
+  }
+
+  function updateCopyPageRegions() {
+    var form = document.querySelector("[data-copy-form]");
+    if (form) {
+      form.outerHTML = renderCopyForm();
+    }
+    updateCopyResultsRegion();
   }
 
   function renderStoryboardRows() {
@@ -2459,11 +2535,11 @@
       }, {
         onToken: function (token) {
           state.hot.ideasText += token;
-          renderRoute();
+          scheduleStreamUpdate("ideas", updateIdeasStreamText);
         },
         onDone: function () {
           state.hot.ideasCards = parseIdeaCards(state.hot.ideasText);
-          renderRoute();
+          updateIdeasArea();
         },
       });
       state.hot.ideasCards = parseIdeaCards(state.hot.ideasText);
@@ -2475,7 +2551,7 @@
       if (button) {
         button.disabled = false;
       }
-      renderRoute();
+      updateIdeasArea();
     }
   }
 
@@ -2496,7 +2572,7 @@
     state.copy.result = emptyCopyResult();
     state.copy.selected = {};
     state.copy.expanded = { titles: false, hooks: false, intros: false, tags: false };
-    renderRoute();
+    updateCopyPageRegions();
 
     try {
       await api.generateCopy({
@@ -2508,11 +2584,11 @@
         onToken: function (token) {
           state.copy.rawText += token;
           applyCopyResult(parseCopyStream(state.copy.rawText));
-          renderRoute();
+          scheduleStreamUpdate("copy", updateCopyResultsRegion);
         },
         onFinal: function (result) {
           applyCopyResult(result || parseCopyStream(state.copy.rawText));
-          renderRoute();
+          updateCopyPageRegions();
         },
       }, controller.signal);
       ui.showToast("文案生成完成", "success");
@@ -2525,7 +2601,7 @@
     } finally {
       state.copy.loading = false;
       state.copy.controller = null;
-      renderRoute();
+      updateCopyPageRegions();
     }
   }
 
@@ -2726,7 +2802,7 @@
     state.report.content = "";
     state.report.error = "";
     state.report.dateRange = reportDateRange(state.report.type);
-    renderRoute();
+    updateReportPageRegions();
 
     try {
       await api.generateReport({
@@ -2735,12 +2811,12 @@
       }, {
         onToken: function (token) {
           state.report.content += token;
-          renderRoute();
+          scheduleStreamUpdate("report", updateReportPreviewRegion);
         },
         onDone: function (content, event) {
           state.report.content = content || state.report.content;
           state.report.dateRange = event && event.dateRange ? event.dateRange : state.report.dateRange;
-          renderRoute();
+          updateReportPageRegions();
         },
       }, controller.signal);
       ui.showToast("报告生成完成", "success");
@@ -2750,7 +2826,7 @@
     } finally {
       state.report.loading = false;
       state.report.controller = null;
-      renderRoute();
+      updateReportPageRegions();
     }
   }
 
