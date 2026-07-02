@@ -3,11 +3,13 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const { createConfigStore } = require("./lib/config");
 
 const HOST = "127.0.0.1";
 const PORT = 3900;
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, "public");
+const defaultConfigStore = createConfigStore();
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -66,7 +68,8 @@ function readJsonBody(req) {
   });
 }
 
-async function handleApi(req, res, pathname) {
+async function handleApi(req, res, pathname, services) {
+  const configStore = services.configStore || defaultConfigStore;
   let body = {};
   if (req.method !== "GET" && req.method !== "HEAD") {
     try {
@@ -82,13 +85,13 @@ async function handleApi(req, res, pathname) {
   }
 
   if (pathname === "/api/config" && req.method === "GET") {
-    sendJson(res, 501, { error: "配置接口尚未实现" });
+    sendJson(res, 200, configStore.readPublicConfig());
     return;
   }
 
   if (pathname === "/api/config" && req.method === "POST") {
-    void body;
-    sendJson(res, 501, { error: "配置接口尚未实现" });
+    configStore.saveConfig(body);
+    sendJson(res, 200, configStore.readPublicConfig());
     return;
   }
 
@@ -150,13 +153,15 @@ function serveStatic(req, res, pathname) {
   });
 }
 
-function createServer() {
+function createServer(options) {
+  const services = options || {};
+
   return http.createServer((req, res) => {
     const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
     const pathname = url.pathname;
 
     if (pathname.startsWith("/api/")) {
-      handleApi(req, res, pathname).catch((error) => {
+      handleApi(req, res, pathname, services).catch((error) => {
         console.error(error);
         sendJson(res, 500, { error: "服务器内部错误" });
       });

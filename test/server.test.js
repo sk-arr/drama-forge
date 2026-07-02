@@ -3,11 +3,14 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { once } = require("node:events");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const { createServer } = require("../server");
+const { createConfigStore } = require("../lib/config");
 
-async function withServer(fn) {
-  const server = createServer();
+async function withServer(fn, options) {
+  const server = createServer(options);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
@@ -19,6 +22,12 @@ async function withServer(fn) {
     server.close();
     await once(server, "close");
   }
+}
+
+function makeDataDir() {
+  const dataDir = path.join(__dirname, "..", "data", `server-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  fs.mkdirSync(dataDir, { recursive: true });
+  return dataDir;
 }
 
 test("serves the static homepage from public/index.html", async () => {
@@ -65,4 +74,51 @@ test("keeps stage-one API routes reserved", async () => {
     assert.notEqual(configResponse.status, 404);
     assert.notEqual(testResponse.status, 404);
   });
+});
+
+test("reads and saves config through API while preserving masked apiKey", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const saveResponse = await fetch(`${baseUrl}/api/config`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ai: {
+            provider: "DeepSeek",
+            baseUrl: "https://api.deepseek.com/v1",
+            model: "deepseek-chat",
+            apiKey: "sk-abcdef123456",
+          },
+        }),
+      });
+      const savedPublic = await saveResponse.json();
+
+      assert.equal(saveResponse.status, 200);
+      assert.equal(savedPublic.ai.apiKey, "sk-a••••3456");
+
+      const mask = savedPublic.ai.apiKey;
+      const updateResponse = await fetch(`${baseUrl}/api/config`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ai: {
+            provider: "Kimi",
+            baseUrl: "https://api.moonshot.cn/v1",
+            model: "moonshot-v1-8k",
+            apiKey: mask,
+          },
+        }),
+      });
+      const updatedPublic = await updateResponse.json();
+
+      assert.equal(updateResponse.status, 200);
+      assert.equal(updatedPublic.ai.provider, "Kimi");
+      assert.equal(configStore.readConfig().ai.apiKey, "sk-abcdef123456");
+    }, { configStore });
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
 });
