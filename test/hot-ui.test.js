@@ -44,6 +44,7 @@ test("hot page css includes top cards, rows, and ideas styles", () => {
     ".hot-top-grid",
     ".hot-card",
     ".hot-cover",
+    ".hot-cover-fallback",
     ".rank-badge",
     ".hot-list-card",
     ".hot-list-row",
@@ -52,4 +53,9 @@ test("hot page css includes top cards, rows, and ideas styles", () => {
   ].forEach((selector) => {
     assert.ok(css.includes(selector), `missing css selector: ${selector}`);
   });
+});
+
+test("top hot cards render a designed fallback when cover is absent", () => {
+  assert.ok(appJs.includes("hot-cover-fallback"), "missing fallback cover markup");
+  assert.ok(appJs.includes("sourceLabelFor"), "missing source label helper");
 });

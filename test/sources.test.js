@@ -52,6 +52,24 @@ test("normalizes UApiPro response into the shared list shape", () => {
   ]);
 });
 
+test("normalizes nested extra image fields into cover urls", () => {
+  const list = normalizeHotList("uapis", {
+    list: [
+      {
+        index: 1,
+        title: "B站热榜词条",
+        hot_value: "923.2万",
+        extra: {
+          pic: "https://example.com/bilibili.jpg",
+        },
+        url: "https://example.com/bilibili",
+      },
+    ],
+  });
+
+  assert.equal(list[0].cover, "https://example.com/bilibili.jpg");
+});
+
 test("normalizes Guiguiya response into the shared list shape", () => {
   const list = normalizeHotList("guiguiya", {
     data: [

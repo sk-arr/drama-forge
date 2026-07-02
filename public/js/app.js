@@ -238,6 +238,10 @@
     }) || HOT_SOURCES[0];
   }
 
+  function sourceLabelFor(sourceId) {
+    return hotSourceById(sourceId).label;
+  }
+
   function readLastHotSource() {
     try {
       return window.localStorage.getItem("drama-forge:hot-source") || "";
@@ -772,11 +776,19 @@
 
   function renderTopCards(list, sourceId) {
     var topLabels = ["TOP 1", "TOP 2", "TOP 3"];
+    var sourceLabel = sourceLabelFor(sourceId);
     return [
       '<div class="hot-top-grid">',
       list.slice(0, 3).map(function (item, index) {
         var coverClass = "c" + ((index % 3) + 1);
         var style = item.cover ? ' style="background-image:url(' + ui.escapeHtml(item.cover) + ')"' : "";
+        var fallback = item.cover ? "" : [
+          '<span class="hot-cover-fallback"><span>',
+          ui.escapeHtml(sourceLabel),
+          '</span><strong>',
+          ui.escapeHtml(item.title),
+          "</strong></span>",
+        ].join("");
         return [
           '<a class="hot-card" href="',
           ui.escapeHtml(itemUrl(sourceId, item)),
@@ -788,7 +800,9 @@
           style,
           '><span class="rank-badge">',
           ui.escapeHtml(topLabels[index]),
-          '</span><span class="play">',
+          "</span>",
+          fallback,
+          '<span class="play">',
           ui.icon("chevron"),
           "</span></div>",
           '<div class="hot-title">',
