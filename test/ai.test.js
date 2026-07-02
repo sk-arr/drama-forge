@@ -20,13 +20,13 @@ test("sends a minimal OpenAI-compatible chat request", async () => {
   const result = await testAiConnection({
     baseUrl: "https://api.deepseek.com/v1/",
     model: "deepseek-chat",
-    apiKey: "sk-test",
+    apiKey: "key-test",
   }, { fetchImpl, timeoutMs: 50 });
 
   assert.equal(result.ok, true);
   assert.equal(calls[0].url, "https://api.deepseek.com/v1/chat/completions");
   assert.equal(calls[0].options.method, "POST");
-  assert.equal(calls[0].options.headers.authorization, "Bearer sk-test");
+  assert.equal(calls[0].options.headers.authorization, "Bearer key-test");
   assert.equal(JSON.parse(calls[0].options.body).max_tokens, 1);
 });
 

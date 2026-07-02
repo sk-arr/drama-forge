@@ -90,14 +90,14 @@ test("reads and saves config through API while preserving masked apiKey", async 
             provider: "DeepSeek",
             baseUrl: "https://api.deepseek.com/v1",
             model: "deepseek-chat",
-            apiKey: "sk-abcdef123456",
+            apiKey: "key-abcdef123456",
           },
         }),
       });
       const savedPublic = await saveResponse.json();
 
       assert.equal(saveResponse.status, 200);
-      assert.equal(savedPublic.ai.apiKey, "sk-a••••3456");
+      assert.equal(savedPublic.ai.apiKey, "key-••••3456");
 
       const mask = savedPublic.ai.apiKey;
       const updateResponse = await fetch(`${baseUrl}/api/config`, {
@@ -116,7 +116,7 @@ test("reads and saves config through API while preserving masked apiKey", async 
 
       assert.equal(updateResponse.status, 200);
       assert.equal(updatedPublic.ai.provider, "Kimi");
-      assert.equal(configStore.readConfig().ai.apiKey, "sk-abcdef123456");
+      assert.equal(configStore.readConfig().ai.apiKey, "key-abcdef123456");
     }, { configStore });
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
@@ -133,7 +133,7 @@ test("tests AI connection through injected service using posted settings", async
         provider: "DeepSeek",
         baseUrl: "https://api.deepseek.com/v1",
         model: "deepseek-chat",
-        apiKey: "sk-existing-1234",
+        apiKey: "key-existing-1234",
       },
     });
 
@@ -142,7 +142,7 @@ test("tests AI connection through injected service using posted settings", async
         assert.equal(config.ai.provider, "Kimi");
         assert.equal(config.ai.baseUrl, "https://api.moonshot.cn/v1");
         assert.equal(config.ai.model, "moonshot-v1-8k");
-        assert.equal(config.ai.apiKey, "sk-existing-1234");
+        assert.equal(config.ai.apiKey, "key-existing-1234");
         return { ok: true, latencyMs: 18 };
       },
     };
@@ -156,7 +156,7 @@ test("tests AI connection through injected service using posted settings", async
             provider: "Kimi",
             baseUrl: "https://api.moonshot.cn/v1",
             model: "moonshot-v1-8k",
-            apiKey: "sk-e••••1234",
+            apiKey: "key-••••1234",
           },
         }),
       });

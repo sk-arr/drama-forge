@@ -46,14 +46,14 @@ test("saves config and returns apiKey masked for public reads", () => {
         provider: "DeepSeek",
         baseUrl: "https://api.deepseek.com/v1",
         model: "deepseek-chat",
-        apiKey: "sk-1234567890abcd",
+        apiKey: "key-1234567890abcd",
       },
       demoMode: true,
       refreshMinutes: 15,
     });
 
-    assert.equal(store.readConfig().ai.apiKey, "sk-1234567890abcd");
-    assert.equal(store.readPublicConfig().ai.apiKey, "sk-1••••abcd");
+    assert.equal(store.readConfig().ai.apiKey, "key-1234567890abcd");
+    assert.equal(store.readPublicConfig().ai.apiKey, "key-••••abcd");
     assert.equal(store.readPublicConfig().demoMode, true);
     assert.equal(store.readPublicConfig().refreshMinutes, 15);
   } finally {
@@ -68,7 +68,7 @@ test("keeps the existing apiKey when the public mask is posted back", () => {
   try {
     store.saveConfig({
       ai: {
-        apiKey: "sk-live-secret-9999",
+        apiKey: "live-secret-9999",
       },
     });
 
@@ -77,13 +77,13 @@ test("keeps the existing apiKey when the public mask is posted back", () => {
         provider: "Kimi",
         baseUrl: "https://api.moonshot.cn/v1",
         model: "moonshot-v1-8k",
-        apiKey: maskApiKey("sk-live-secret-9999"),
+        apiKey: maskApiKey("live-secret-9999"),
       },
     });
 
     const config = store.readConfig();
     assert.equal(config.ai.provider, "Kimi");
-    assert.equal(config.ai.apiKey, "sk-live-secret-9999");
+    assert.equal(config.ai.apiKey, "live-secret-9999");
   } finally {
     removeDir(dataDir);
   }
