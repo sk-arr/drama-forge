@@ -19,6 +19,7 @@ const {
 } = require("./lib/generation");
 const { createHistoryStore } = require("./lib/history");
 const { createPromptLibrary } = require("./lib/prompts");
+const demoMock = require("./lib/mock");
 
 const HOST = "127.0.0.1";
 const PORT = 3900;
@@ -202,121 +203,24 @@ function buildReportPrompt(body, configStore) {
   };
 }
 
-function demoCopyOutput(platform) {
-  if (platform === "kuaishou") {
-    return [
-      "===TITLES===",
-      "- 老铁别眨眼，她真不是普通保洁",
-      "- 这一巴掌，替她憋屈了三年",
-      "- 全公司笑她穷，下一秒都慌了",
-      "===HOOKS===",
-      "- 谁懂啊，她刚拖完地就被董事会点名了",
-      "- 老铁你看完再骂，她真有苦衷",
-      "- 别欺负老实人，这次她要讨回公道",
-      "===INTROS===",
-      "- 被羞辱的保洁阿姨转身亮出身份，替自己讨回尊严。",
-      "- 她忍了三年，只为等到今天让真相大白。",
-      "- 一场公司大会，把所有看不起她的人都打醒了。",
-      "===TAGS===",
-      "- #短剧 #快手短剧 #女频逆袭 #身份反转 #老铁追剧 #打脸 #爽文 #家庭情感",
-    ].join("\n");
-  }
-
-  if (platform === "weixin" || platform === "微信小程序") {
-    return [
-      "===TITLES===",
-      "- 保洁阿姨被逼离职后，总裁身份藏不住了",
-      "- 她替女儿忍辱三年，终于等来翻身那一刻",
-      "- 全公司都在等她出丑，只有董事长知道真相",
-      "===HOOKS===",
-      "- 她只是来打扫办公室，却被亲手赶出自己公司",
-      "- 女儿病危那晚，她决定不再隐藏身份",
-      "- 看不起她的人不知道，下一集她就要收回集团",
-      "===INTROS===",
-      "- 林晚为保护女儿隐藏总裁身份，却在被羞辱后不得不重回董事会，继续看她如何一步步夺回公司。",
-      "- 一张离职单牵出十年前的股权秘密，她的反击才刚开始。",
-      "- 她不是没人撑腰，她自己就是最大的靠山。下一集,她将亲手揭开背叛者。",
-      "===TAGS===",
-      "- #短剧 #微信短剧 #女频逆袭 #追剧 #付费短剧 #身份反转 #都市情感 #爽剧",
-    ].join("\n");
-  }
-
-  return [
-    "===TITLES===",
-    "- 保洁阿姨摊牌那一刻",
-    "- 全公司都跪着叫她总裁",
-    "- 她扫的不是地，是全场脸面",
-    "===HOOKS===",
-    "- 别叫我阿姨，叫我董事长",
-    "- 她刚被开除，集团印章就送到了",
-    "- 所有人都笑她穷，下一秒笑不出来了",
-    "===INTROS===",
-    "- 被羞辱的保洁阿姨亮出真实身份，反手收回整家公司。",
-    "- 她忍辱三年，只为查清丈夫背叛的真相。",
-    "- 一场会议，让所有看不起她的人当场道歉。",
-    "===TAGS===",
-    "- #短剧 #抖音短剧 #女频逆袭 #身份反转 #打脸 #爽剧 #总裁 #追剧",
-  ].join("\n");
+function demoDelay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function demoStoryboardList() {
-  return [
-    { shot: 1, scale: "近景", visual: "林晚穿着保洁服推开会议室门,手里还拿着拖把。", audio: "门轴轻响,会议室瞬间安静。", duration: 3 },
-    { shot: 2, scale: "中景", visual: "主管挡在她面前,把离职单拍到桌上。", audio: "主管: 这里不是你该来的地方。", duration: 4 },
-    { shot: 3, scale: "特写", visual: "林晚低头看离职单,指尖慢慢攥紧。", audio: "纸张被捏皱的声音。", duration: 3 },
-    { shot: 4, scale: "近景", visual: "董事会秘书快步进门,双手递上集团印章。", audio: "秘书: 林总,董事会都在等您。", duration: 4 },
-    { shot: 5, scale: "特写", visual: "主管脸色瞬间僵住,离职单从手里滑落。", audio: "离职单落地声。", duration: 2 },
-  ];
+function demoTitle(title) {
+  return `(演示) ${title}`;
 }
 
-async function streamDemoIdeas(res) {
-  const chunks = [
-    "1. 题目: 保洁阿姨的总裁局\n   一句话逻辑: 借用身份反差热度,把低姿态职业与高权力身份放进开场反转。\n   适配题材: 女频逆袭\n",
-    "2. 题目: 逆风翻盘的下班十分钟\n   一句话逻辑: 承接职场情绪榜单,用短时间高压场景制造爽点。\n   适配题材: 都市打脸\n",
-    "3. 题目: 萌宝直播认亲夜\n   一句话逻辑: 结合亲子与寻亲讨论度,把认亲动作前置到前三秒。\n   适配题材: 萌宝寻亲",
-  ];
-
-  let content = "";
-  for (const chunk of chunks) {
-    content += chunk;
-    writeSse(res, { type: "token", token: chunk });
-    await new Promise((resolve) => setTimeout(resolve, 120));
+async function streamDemoText(res, content) {
+  const lines = String(content || "").split("\n");
+  for (let index = 0; index < lines.length; index += 1) {
+    const token = index < lines.length - 1 ? `${lines[index]}\n` : lines[index];
+    if (token) {
+      writeSse(res, { type: "token", token });
+    }
+    await demoDelay(120 + Math.floor(Math.random() * 130));
   }
   return content;
-}
-
-function demoReportOutput(type) {
-  return type === "day" ? [
-    "今日完成",
-    "- 完成 3 条素材粗剪,同步给投放同学初筛。",
-    "- 复盘昨天 2 个低完播素材,定位到前 3 秒冲突不够直给。",
-    "",
-    "数据亮点",
-    "- 新标题测试保留了原始记录里的 18.6% 完播率。",
-    "- 小程序链路点击成本稳定在 0.42 元。",
-    "",
-    "明日计划",
-    "- 继续补 5 条女频逆袭开场钩子。",
-    "- 把高点击素材拆成分镜模板给拍摄组。",
-    "",
-    "风险",
-    "- 口播素材库存不足,需要明早补录。",
-  ].join("\n") : [
-    "本周完成",
-    "- 完成 12 条投放素材整理,其中 4 条进入二轮测试。",
-    "- 跑通热点选题到文案、分镜、导出 CSV 的演示流程。",
-    "",
-    "数据亮点",
-    "- 女频逆袭方向保留了原始记录里的 23% 完播率。",
-    "- 素材命名统一后,剪辑查找时间从 20 分钟降到 5 分钟。",
-    "",
-    "下周计划",
-    "- 补齐提示词库和历史记录页,准备 7 月 8 日演示。",
-    "- 继续测试微信小程序付费钩子文案。",
-    "",
-    "风险与需要支持",
-    "- 热榜公共接口偶发不可用,需要保留缓存和演示模式兜底。",
-  ].join("\n");
 }
 
 function readJsonBody(req) {
@@ -444,7 +348,7 @@ async function handleApi(req, res, pathname, services) {
     try {
       let content = "";
       if (config.demoMode) {
-        content = await streamDemoIdeas(res);
+        content = await streamDemoText(res, demoMock.ideasText());
       } else {
         const prompt = buildIdeasPrompt(body, configStore);
         content = await aiService.streamIdeas(config, {
@@ -458,7 +362,8 @@ async function handleApi(req, res, pathname, services) {
         });
       }
 
-      historyStore.save("ideas", ideasHistoryTitle(body.sourceName), {
+      const ideasTitle = ideasHistoryTitle(body.sourceName);
+      historyStore.save("ideas", config.demoMode ? demoTitle(ideasTitle) : ideasTitle, {
         sourceName: body.sourceName || "",
         list: (body.list || []).slice(0, 10),
       }, {
@@ -486,12 +391,7 @@ async function handleApi(req, res, pathname, services) {
     try {
       let content = "";
       if (config.demoMode) {
-        content = demoCopyOutput(body.platform);
-        for (const chunk of content.split(/(?=\n===|\n- )/)) {
-          if (chunk) {
-            writeSse(res, { type: "token", token: chunk });
-          }
-        }
+        content = await streamDemoText(res, demoMock.copyText(body.platform));
       } else {
         const prompt = buildCopyPrompt(body, configStore);
         content = await aiService.streamCopy(config, {
@@ -505,7 +405,8 @@ async function handleApi(req, res, pathname, services) {
       }
 
       const parsed = parseCopyOutput(content);
-      historyStore.save("copy", copyHistoryTitle(body), body, parsed);
+      const copyTitle = copyHistoryTitle(body);
+      historyStore.save("copy", config.demoMode ? demoTitle(copyTitle) : copyTitle, body, parsed);
       writeSse(res, { type: "final", result: parsed });
       res.end();
     } catch (error) {
@@ -525,7 +426,8 @@ async function handleApi(req, res, pathname, services) {
     try {
       let list;
       if (config.demoMode) {
-        list = demoStoryboardList();
+        await demoDelay(1500);
+        list = demoMock.storyboardList();
       } else {
         const prompt = buildStoryboardPrompt(body, configStore);
         let lastError = null;
@@ -548,7 +450,8 @@ async function handleApi(req, res, pathname, services) {
         }
       }
 
-      historyStore.save("storyboard", storyboardHistoryTitle(body), body, list);
+      const storyboardTitle = storyboardHistoryTitle(body);
+      historyStore.save("storyboard", config.demoMode ? demoTitle(storyboardTitle) : storyboardTitle, body, list);
       sendJson(res, 200, { list });
     } catch (error) {
       sendJson(res, 502, { error: error.message || "分镜生成失败" });
@@ -573,12 +476,7 @@ async function handleApi(req, res, pathname, services) {
     try {
       let content = "";
       if (config.demoMode) {
-        content = demoReportOutput(reportPayload.type);
-        for (const chunk of content.split(/(?=\n|^- )/m)) {
-          if (chunk) {
-            writeSse(res, { type: "token", token: chunk });
-          }
-        }
+        content = await streamDemoText(res, demoMock.reportText(reportPayload.type));
       } else {
         content = await aiService.streamReport(config, {
           prompt: reportPayload.prompt,
@@ -590,7 +488,8 @@ async function handleApi(req, res, pathname, services) {
         });
       }
 
-      historyStore.save("report", `${reportTypeLabel(reportPayload.type)} · ${reportPayload.dateRange}`, {
+      const reportTitle = `${reportTypeLabel(reportPayload.type)} · ${reportPayload.dateRange}`;
+      historyStore.save("report", config.demoMode ? demoTitle(reportTitle) : reportTitle, {
         text: body.text || "",
         type: reportPayload.type,
         dateRange: reportPayload.dateRange,
@@ -675,6 +574,10 @@ async function handleApi(req, res, pathname, services) {
     const sourceId = url.searchParams.get("source") || "douyin";
     const force = ["1", "true", "yes"].includes(String(url.searchParams.get("force") || "").toLowerCase());
     const config = configStore.readConfig();
+    if (config.demoMode) {
+      sendJson(res, 200, demoMock.hotMock(sourceId));
+      return;
+    }
     const result = await hotService.fetchHot(sourceId, {
       refreshMinutes: config.refreshMinutes,
       force,
