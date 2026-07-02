@@ -109,6 +109,24 @@
       list: [],
       error: "",
     },
+    files: {
+      dir: "",
+      rule: "date",
+      template: "{日期}_{类型}_{序号}",
+      previewLoading: false,
+      executing: false,
+      undoing: false,
+      preview: null,
+      result: null,
+      error: "",
+      picker: {
+        open: false,
+        path: "",
+        loading: false,
+        data: null,
+        error: "",
+      },
+    },
   };
 
   function getTodayMeta() {
@@ -468,6 +486,37 @@
     return true;
   }
 
+  function collectFilesForm() {
+    var dirInput = document.querySelector("[data-files-dir]");
+    var templateInput = document.querySelector("[data-files-template]");
+    if (dirInput) {
+      state.files.dir = String(dirInput.value || "").trim();
+    }
+    if (templateInput) {
+      state.files.template = String(templateInput.value || "").trim();
+    }
+  }
+
+  function resetFilePreview() {
+    state.files.preview = null;
+    state.files.result = null;
+    state.files.error = "";
+  }
+
+  function fileRelativeName(baseDir, filePath) {
+    var base = String(baseDir || "").replace(/\\/g, "/").replace(/\/+$/, "");
+    var full = String(filePath || "").replace(/\\/g, "/");
+    if (base && full.indexOf(base + "/") === 0) {
+      return full.slice(base.length + 1);
+    }
+    return full;
+  }
+
+  function fileTypeInitial(type) {
+    var text = String(type || "其他");
+    return text.slice(0, 1);
+  }
+
   function renderNavItem(route) {
     return [
       '<a class="nav-item" href="',
@@ -758,6 +807,221 @@
         '</p><button type="button" class="btn-secondary" data-action="refresh-hot">重试</button></div>',
       ].join("") : "",
       renderIdeasArea(),
+      "</section>",
+    ].join("");
+  }
+
+  function renderFilesRulePills() {
+    var rules = [
+      { id: "date", label: "按拍摄日期" },
+      { id: "type", label: "按类型" },
+    ];
+    return [
+      '<div class="platform-pills">',
+      rules.map(function (rule) {
+        return [
+          '<button type="button" class="pill',
+          state.files.rule === rule.id ? " active" : "",
+          '" data-action="select-file-rule" data-rule="',
+          rule.id,
+          '">',
+          ui.escapeHtml(rule.label),
+          "</button>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderFilesTopCard() {
+    return [
+      '<form class="card files-path-card" data-files-form>',
+      '<div class="files-card-head"><div><h2>素材批量整理</h2><p>只扫描所选目录第一层文件，子目录不会被移动。</p></div><span class="files-local-badge">纯本地运行</span></div>',
+      '<div class="files-path-row">',
+      '<input class="input" name="dir" value="',
+      ui.escapeHtml(state.files.dir),
+      '" placeholder="选择或粘贴要整理的文件夹路径" autocomplete="off" data-files-dir>',
+      '<button type="button" class="btn-secondary" data-action="open-folder-picker">选择…</button>',
+      "</div>",
+      '<p class="field-help">安全规则: 绝不删除文件，只在该目录内移动和重命名。</p>',
+      "</form>",
+    ].join("");
+  }
+
+  function renderFilesRuleCard() {
+    return [
+      '<section class="card files-rule-card">',
+      '<div class="files-card-head"><div><h2>整理规则</h2><p>模板留空 = 不重命名，只归类。</p></div></div>',
+      '<div class="field"><span class="field-label">分类方式</span>',
+      renderFilesRulePills(),
+      "</div>",
+      '<div class="field"><label for="files-template">重命名模板</label><input class="input" id="files-template" name="template" value="',
+      ui.escapeHtml(state.files.template),
+      '" placeholder="{日期}_{类型}_{序号}" autocomplete="off" data-files-template></div>',
+      '<div class="btn-row"><button type="button" class="btn-secondary" data-action="preview-files"',
+      state.files.previewLoading ? " disabled" : "",
+      ">",
+      state.files.previewLoading ? "预览中..." : "预览",
+      '</button><button type="button" class="btn-primary" data-action="execute-files"',
+      state.files.preview && state.files.preview.plan && state.files.preview.plan.length && !state.files.executing ? "" : " disabled",
+      ">",
+      state.files.executing ? "执行中..." : "执行整理",
+      "</button></div>",
+      '<p class="field-help">预览成功前不可执行；改动路径、规则或模板后需要重新预览。</p>',
+      "</section>",
+    ].join("");
+  }
+
+  function renderFilePreviewRows() {
+    var preview = state.files.preview;
+    if (state.files.previewLoading) {
+      return Array.from({ length: 6 }).map(function () {
+        return '<div class="file-preview-row"><span class="file-type-badge"><div class="skeleton" style="width:16px;height:16px"></div></span><div class="skeleton" style="height:18px;flex:1"></div><div class="skeleton" style="height:18px;width:160px"></div></div>';
+      }).join("");
+    }
+    if (!preview || !preview.plan || !preview.plan.length) {
+      return '<div class="storyboard-empty"><h2>还没有预览</h2><p>选择文件夹和规则后点击预览。</p></div>';
+    }
+
+    var rows = preview.plan.slice(0, 50).map(function (item) {
+      return [
+        '<div class="file-preview-row">',
+        '<span class="file-type-badge">',
+        ui.escapeHtml(fileTypeInitial(item.type)),
+        '</span><span class="file-name">',
+        ui.escapeHtml(item.fromName || fileRelativeName(state.files.dir, item.from)),
+        '</span><span class="file-arrow">→</span><span class="file-target">',
+        ui.escapeHtml(item.toRelative || fileRelativeName(state.files.dir, item.to)),
+        "</span></div>",
+      ].join("");
+    }).join("");
+
+    var rest = preview.plan.length > 50
+      ? '<div class="file-preview-more">等 ' + (preview.plan.length - 50) + " 条</div>"
+      : "";
+    return rows + rest;
+  }
+
+  function renderFilesPreviewCard() {
+    var preview = state.files.preview;
+    var total = preview ? preview.total : 0;
+    var dirCount = preview && preview.dirs ? preview.dirs.length : 0;
+    return [
+      '<section class="card file-preview-card">',
+      '<div class="files-card-head"><div><h2>整理预览</h2><p>扫描到 ',
+      total,
+      " 个文件 → ",
+      dirCount,
+      " 个目录</p></div></div>",
+      state.files.error ? '<div class="status-box visible error">' + ui.icon("x") + "<span>" + ui.escapeHtml(state.files.error) + "</span></div>" : "",
+      '<div class="file-preview-list">',
+      renderFilePreviewRows(),
+      "</div>",
+      "</section>",
+    ].join("");
+  }
+
+  function renderFileFailureList(failed) {
+    if (!failed || !failed.length) {
+      return "";
+    }
+    return [
+      '<details class="file-failure-list" open><summary>失败 ',
+      failed.length,
+      " 条</summary>",
+      failed.map(function (item) {
+        return [
+          '<div class="file-failure-row"><span>',
+          ui.escapeHtml(fileRelativeName(state.files.dir, item.from)),
+          '</span><span>',
+          ui.escapeHtml(item.reason || "失败"),
+          "</span></div>",
+        ].join("");
+      }).join(""),
+      "</details>",
+    ].join("");
+  }
+
+  function renderFilesResultCard() {
+    var result = state.files.result;
+    if (!result) {
+      return "";
+    }
+
+    return [
+      '<section class="card file-result-card">',
+      '<div class="files-card-head"><div><h2>执行结果</h2><p>成功移动 ',
+      result.moved || 0,
+      " 个文件，失败 ",
+      result.failed ? result.failed.length : 0,
+      " 条</p></div>",
+      '<button type="button" class="btn-secondary" data-action="undo-files"',
+      result.historyId && !state.files.undoing ? "" : " disabled",
+      ">",
+      state.files.undoing ? "撤销中..." : "撤销本次",
+      "</button></div>",
+      renderFileFailureList(result.failed),
+      "</section>",
+    ].join("");
+  }
+
+  function renderFolderPicker() {
+    if (!state.files.picker.open) {
+      return "";
+    }
+    var picker = state.files.picker;
+    var dirs = picker.data && Array.isArray(picker.data.dirs) ? picker.data.dirs : [];
+    var currentPath = picker.data && picker.data.path !== undefined ? picker.data.path : picker.path;
+    var parent = picker.data && picker.data.parent ? picker.data.parent : "";
+
+    return [
+      '<div class="folder-picker-backdrop">',
+      '<section class="folder-picker" role="dialog" aria-modal="true">',
+      '<div class="folder-picker-head"><div><h2>选择文件夹</h2><p>',
+      currentPath ? ui.escapeHtml(currentPath) : "选择一个磁盘开始",
+      '</p></div><button type="button" class="btn-icon" data-action="close-folder-picker" title="关闭">',
+      ui.icon("x"),
+      "</button></div>",
+      '<div class="folder-picker-actions">',
+      parent ? '<button type="button" class="btn-secondary" data-action="browse-folder" data-path="' + ui.escapeHtml(parent) + '">上一级</button>' : "",
+      currentPath ? '<button type="button" class="btn-primary" data-action="choose-current-folder">选择此文件夹</button>' : "",
+      "</div>",
+      picker.loading ? '<div class="card-pad"><div class="skeleton" style="height:180px"></div></div>' : "",
+      picker.error ? '<div class="status-box visible error">' + ui.icon("x") + "<span>" + ui.escapeHtml(picker.error) + "</span></div>" : "",
+      '<div class="folder-list">',
+      dirs.length ? dirs.map(function (dir) {
+        return [
+          '<button type="button" class="folder-row" data-action="browse-folder" data-path="',
+          ui.escapeHtml(dir.path),
+          '">',
+          ui.icon("folder"),
+          '<span>',
+          ui.escapeHtml(dir.name),
+          "</span></button>",
+        ].join("");
+      }).join("") : '<div class="storyboard-empty"><p>没有可进入的子文件夹。</p></div>',
+      "</div>",
+      "</section></div>",
+    ].join("");
+  }
+
+  function renderFilesPage(route) {
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(route.meta),
+      "</span></div>",
+      '<div class="files-layout">',
+      '<div class="files-left">',
+      renderFilesTopCard(),
+      renderFilesRuleCard(),
+      renderFilesResultCard(),
+      "</div>",
+      renderFilesPreviewCard(),
+      "</div>",
+      renderFolderPicker(),
       "</section>",
     ].join("");
   }
@@ -1201,6 +1465,8 @@
       pageRoot.innerHTML = renderCopyPage(route);
     } else if (route.id === "storyboard") {
       pageRoot.innerHTML = renderStoryboardPage(route);
+    } else if (route.id === "files") {
+      pageRoot.innerHTML = renderFilesPage(route);
     } else {
       pageRoot.innerHTML = renderPlaceholder(route);
     }
@@ -1521,6 +1787,104 @@
     ui.showToast("CSV 已导出", "success");
   }
 
+  async function browseFolder(pathValue) {
+    state.files.picker.loading = true;
+    state.files.picker.error = "";
+    state.files.picker.path = pathValue || "";
+    renderRoute();
+
+    try {
+      state.files.picker.data = await api.browseFiles(pathValue || "");
+    } catch (error) {
+      state.files.picker.error = error.message || "读取文件夹失败";
+    } finally {
+      state.files.picker.loading = false;
+      renderRoute();
+    }
+  }
+
+  async function openFolderPicker() {
+    state.files.picker.open = true;
+    state.files.picker.data = null;
+    state.files.picker.error = "";
+    await browseFolder(state.files.dir || "");
+  }
+
+  async function handlePreviewFiles() {
+    collectFilesForm();
+    if (!state.files.dir) {
+      ui.showToast("先选择要整理的文件夹", "error", 6000);
+      return;
+    }
+
+    state.files.previewLoading = true;
+    state.files.error = "";
+    state.files.preview = null;
+    state.files.result = null;
+    renderRoute();
+
+    try {
+      state.files.preview = await api.scanFiles({
+        dir: state.files.dir,
+        rule: state.files.rule,
+        template: state.files.template,
+      });
+      ui.showToast("预览已生成", "success");
+    } catch (error) {
+      state.files.error = error.message || "扫描失败";
+      ui.showToast(state.files.error, "error", 6000);
+    } finally {
+      state.files.previewLoading = false;
+      renderRoute();
+    }
+  }
+
+  async function handleExecuteFiles() {
+    collectFilesForm();
+    if (!state.files.preview || !state.files.preview.plan || !state.files.preview.plan.length) {
+      ui.showToast("预览成功前不可执行", "error", 6000);
+      return;
+    }
+
+    state.files.executing = true;
+    renderRoute();
+
+    try {
+      state.files.result = await api.executeFiles({
+        dir: state.files.dir,
+        plan: state.files.preview.plan,
+      });
+      ui.showToast("整理完成: 成功 " + state.files.result.moved + " 个，失败 " + state.files.result.failed.length + " 条", state.files.result.failed.length ? "error" : "success", state.files.result.failed.length ? 6000 : 3200);
+    } catch (error) {
+      state.files.error = error.message || "执行整理失败";
+      ui.showToast(state.files.error, "error", 6000);
+    } finally {
+      state.files.executing = false;
+      renderRoute();
+    }
+  }
+
+  async function handleUndoFiles() {
+    if (!state.files.result || !state.files.result.historyId) {
+      ui.showToast("没有可撤销的整理记录", "error", 4000);
+      return;
+    }
+
+    state.files.undoing = true;
+    renderRoute();
+
+    try {
+      var result = await api.undoFiles({ historyId: state.files.result.historyId });
+      state.files.result.historyId = "";
+      ui.showToast("已撤销: 还原 " + result.restored + " 个，失败 " + result.failed.length + " 条", result.failed.length ? "error" : "success", result.failed.length ? 6000 : 3200);
+    } catch (error) {
+      ui.showToast(error.message || "撤销失败", "error", 6000);
+    } finally {
+      state.files.undoing = false;
+      renderRoute();
+    }
+  }
+
   function bindEvents() {
     document.addEventListener("submit", async function (event) {
       if (event.target.matches("[data-settings-form]")) {
@@ -1543,6 +1907,12 @@
       if (event.target.matches("[data-storyboard-form]")) {
         event.preventDefault();
         await handleGenerateStoryboard();
+        return;
+      }
+
+      if (event.target.matches("[data-files-form]")) {
+        event.preventDefault();
+        await handlePreviewFiles();
       }
     });
 
@@ -1553,6 +1923,14 @@
       }
       if (event.target.closest("[data-storyboard-form]")) {
         collectStoryboardForm();
+        return;
+      }
+      if (event.target.matches("[data-files-dir], [data-files-template]")) {
+        collectFilesForm();
+        if (state.files.preview || state.files.result) {
+          resetFilePreview();
+          renderRoute();
+        }
       }
     });
 
@@ -1687,6 +2065,54 @@
 
       if (action === "export-storyboard") {
         handleExportStoryboard();
+        return;
+      }
+
+      if (action === "select-file-rule") {
+        collectFilesForm();
+        state.files.rule = actionTarget.getAttribute("data-rule") || "date";
+        resetFilePreview();
+        renderRoute();
+        return;
+      }
+
+      if (action === "open-folder-picker") {
+        collectFilesForm();
+        await openFolderPicker();
+        return;
+      }
+
+      if (action === "close-folder-picker") {
+        state.files.picker.open = false;
+        renderRoute();
+        return;
+      }
+
+      if (action === "browse-folder") {
+        await browseFolder(actionTarget.getAttribute("data-path") || "");
+        return;
+      }
+
+      if (action === "choose-current-folder") {
+        state.files.dir = state.files.picker.data && state.files.picker.data.path ? state.files.picker.data.path : state.files.picker.path;
+        state.files.picker.open = false;
+        resetFilePreview();
+        renderRoute();
+        return;
+      }
+
+      if (action === "preview-files") {
+        await handlePreviewFiles();
+        return;
+      }
+
+      if (action === "execute-files") {
+        await handleExecuteFiles();
+        return;
+      }
+
+      if (action === "undo-files") {
+        await handleUndoFiles();
         return;
       }
 

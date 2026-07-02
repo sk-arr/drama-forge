@@ -132,14 +132,47 @@
     });
   }
 
+  function browseFiles(dirPath) {
+    var params = new URLSearchParams();
+    if (dirPath) {
+      params.set("path", dirPath);
+    }
+    return requestJson("/api/files/browse" + (params.toString() ? "?" + params.toString() : ""));
+  }
+
+  function scanFiles(payload) {
+    return requestJson("/api/files/scan", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  function executeFiles(payload) {
+    return requestJson("/api/files/execute", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  function undoFiles(payload) {
+    return requestJson("/api/files/undo", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
   window.DramaForgeApi = {
+    browseFiles: browseFiles,
+    executeFiles: executeFiles,
     generateCopy: generateCopy,
     generateIdeas: generateIdeas,
     generateStoryboard: generateStoryboard,
     getConfig: getConfig,
     getHot: getHot,
     saveConfig: saveConfig,
+    scanFiles: scanFiles,
     streamSse: streamSse,
     testConnection: testConnection,
+    undoFiles: undoFiles,
   };
 })();
