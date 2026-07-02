@@ -62,3 +62,17 @@ test("keeps tablet widths on the two-column app shell", () => {
   assert.match(phoneBlock[0], /\.app-shell\s*\{\s*display:\s*block;/);
   assert.match(tabletBlock[0], /\.hot-top-grid\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
 });
+
+test("main content fills the remaining app workspace", () => {
+  const shellBlock = css.match(/\.app-shell\s*\{[\s\S]*?\n\}/);
+  const mainBlock = css.match(/\.main\s*\{[\s\S]*?\n\}/);
+
+  assert.ok(shellBlock, "missing app shell styles");
+  assert.ok(mainBlock, "missing main content styles");
+  assert.match(shellBlock[0], /display:\s*grid;/);
+  assert.match(shellBlock[0], /grid-template-columns:\s*[^;]*minmax\(0,\s*1fr\)/);
+  assert.match(mainBlock[0], /width:\s*100%;/);
+  assert.match(mainBlock[0], /max-width:\s*none;/);
+  assert.match(mainBlock[0], /min-width:\s*0;/);
+  assert.doesNotMatch(mainBlock[0], /max-width:\s*1080px;/);
+});
