@@ -1648,6 +1648,465 @@
     }
   }
 
+  var HISTORY_FILTERS = [
+    { id: "all", label: "全部" },
+    { id: "copy", label: "文案" },
+    { id: "storyboard", label: "分镜" },
+    { id: "report", label: "周报" },
+    { id: "ideas", label: "选题" },
+    { id: "files", label: "素材整理" },
+  ];
+
+  var HISTORY_TYPE_META = {
+    copy: { label: "文案", icon: "copy" },
+    storyboard: { label: "分镜", icon: "storyboard" },
+    report: { label: "周报", icon: "report" },
+    ideas: { label: "选题", icon: "spark" },
+    files: { label: "素材整理", icon: "folder" },
+  };
+
+  function historyTypeMeta(type) {
+    return HISTORY_TYPE_META[type] || { label: type || "记录", icon: "history" };
+  }
+
+  function formatHistoryTime(isoText) {
+    var date = new Date(isoText || "");
+    if (!Number.isFinite(date.getTime())) {
+      return "";
+    }
+    var minutes = String(date.getMinutes());
+    return (date.getMonth() + 1) + "月" + date.getDate() + "日 " + date.getHours() + ":" + (minutes.length < 2 ? "0" + minutes : minutes);
+  }
+
+  async function loadHistory(force) {
+    if (state.history.loading || (state.history.loaded && !force)) {
+      return;
+    }
+    state.history.loading = true;
+    state.history.error = "";
+    renderRoute();
+
+    try {
+      var payload = await api.getHistory(state.history.filter);
+      state.history.list = Array.isArray(payload.list) ? payload.list : [];
+      state.history.loaded = true;
+    } catch (error) {
+      state.history.error = error.message || "历史记录读取失败";
+    } finally {
+      state.history.loading = false;
+      renderRoute();
+    }
+  }
+
+  async function openHistoryDetail(id) {
+    state.history.detailId = id;
+    state.history.detail = null;
+    state.history.detailLoading = true;
+    renderRoute();
+
+    try {
+      state.history.detail = await api.getHistoryDetail(id);
+    } catch (error) {
+      state.history.detailId = "";
+      ui.showToast(error.message || "历史记录读取失败", "error", 6000);
+    } finally {
+      state.history.detailLoading = false;
+      renderRoute();
+    }
+  }
+
+  function historyCopyGroups(output) {
+    return COPY_GROUPS.map(function (group) {
+      return {
+        key: group.key,
+        label: group.label,
+        items: Array.isArray(output && output[group.key]) ? output[group.key] : [],
+      };
+    });
+  }
+
+  function renderHistoryLines(items, renderItem) {
+    return items.map(function (item) {
+      return '<div class="history-line">' + renderItem(item) + "</div>";
+    }).join("");
+  }
+
+  function renderHistoryCopyDetail(record) {
+    return historyCopyGroups(record.output).map(function (group) {
+      if (!group.items.length) {
+        return "";
+      }
+      return [
+        '<div class="history-detail-section"><h3>',
+        ui.escapeHtml(group.label),
+        " · ",
+        group.items.length,
+        " 条</h3>",
+        renderHistoryLines(group.items, function (text) {
+          return "<span>" + ui.escapeHtml(text) + "</span>";
+        }),
+        "</div>",
+      ].join("");
+    }).join("");
+  }
+
+  function renderHistoryStoryboardDetail(record) {
+    var list = Array.isArray(record.output) ? record.output : [];
+    return [
+      '<div class="storyboard-table-wrap"><table class="storyboard-table"><thead><tr>',
+      "<th>镜号</th><th>景别</th><th>画面描述</th><th>台词/音效</th><th>时长</th>",
+      "</tr></thead><tbody>",
+      list.map(function (row) {
+        return [
+          "<tr><td>",
+          ui.escapeHtml(row.shot),
+          "</td><td>",
+          ui.escapeHtml(row.scale),
+          "</td><td>",
+          ui.escapeHtml(row.visual),
+          "</td><td>",
+          ui.escapeHtml(row.audio || ""),
+          "</td><td>",
+          ui.escapeHtml(row.duration),
+          "s</td></tr>",
+        ].join("");
+      }).join(""),
+      "</tbody></table></div>",
+    ].join("");
+  }
+
+  function renderHistoryReportDetail(record) {
+    var content = String(record.output || "");
+    return [
+      '<div class="report-body">',
+      content.split(/\r?\n/).map(function (line) {
+        var trimmed = line.trim();
+        if (!trimmed) {
+          return '<div class="report-spacer"></div>';
+        }
+        if (reportSectionTitle(trimmed)) {
+          return '<h3 class="report-section-title">' + ui.escapeHtml(trimmed) + "</h3>";
+        }
+        if (trimmed.indexOf("- ") === 0) {
+          return '<p class="report-bullet">' + ui.escapeHtml(trimmed.slice(2)) + "</p>";
+        }
+        return "<p>" + ui.escapeHtml(trimmed) + "</p>";
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderHistoryIdeasDetail(record) {
+    var cards = record.output && Array.isArray(record.output.cards) ? record.output.cards : [];
+    if (!cards.length) {
+      return '<pre class="ideas-stream">' + ui.escapeHtml(record.output && record.output.text || "") + "</pre>";
+    }
+    return [
+      '<div class="idea-grid">',
+      cards.map(function (card) {
+        return [
+          '<div class="idea-card"><h3>',
+          ui.escapeHtml(card.title),
+          "</h3><p>",
+          ui.escapeHtml(card.logic),
+          '</p><div class="idea-foot"><span>',
+          ui.escapeHtml(card.genre),
+          "</span></div></div>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderHistoryFilesDetail(record) {
+    var output = record.output || {};
+    var moved = Array.isArray(output.moved) ? output.moved : [];
+    var failed = Array.isArray(output.failed) ? output.failed : [];
+
+    return [
+      '<div class="history-detail-section"><h3>移动 ',
+      moved.length,
+      " 个文件</h3>",
+      moved.length ? renderHistoryLines(moved.slice(0, 80), function (item) {
+        return [
+          '<span class="file-name">',
+          ui.escapeHtml(item.fromRelative || item.from),
+          '</span><span class="file-arrow">→</span><span class="file-target">',
+          ui.escapeHtml(item.toRelative || item.to),
+          "</span>",
+        ].join("");
+      }) : '<p class="field-help">本次没有移动任何文件。</p>',
+      moved.length > 80 ? '<p class="field-help">等 ' + (moved.length - 80) + " 条</p>" : "",
+      "</div>",
+      failed.length ? [
+        '<div class="history-detail-section"><h3>失败 ',
+        failed.length,
+        " 条</h3>",
+        renderHistoryLines(failed, function (item) {
+          return "<span>" + ui.escapeHtml(item.from) + "</span><span>" + ui.escapeHtml(item.reason || "失败") + "</span>";
+        }),
+        "</div>",
+      ].join("") : "",
+    ].join("");
+  }
+
+  function renderHistoryDetailBody(record) {
+    if (record.type === "copy") {
+      return renderHistoryCopyDetail(record);
+    }
+    if (record.type === "storyboard") {
+      return renderHistoryStoryboardDetail(record);
+    }
+    if (record.type === "report") {
+      return renderHistoryReportDetail(record);
+    }
+    if (record.type === "ideas") {
+      return renderHistoryIdeasDetail(record);
+    }
+    if (record.type === "files") {
+      return renderHistoryFilesDetail(record);
+    }
+    return '<pre class="ideas-stream">' + ui.escapeHtml(JSON.stringify(record.output, null, 2)) + "</pre>";
+  }
+
+  function renderHistoryDetailActions(record) {
+    var buttons = ['<button type="button" class="btn-secondary" data-action="back-history">返回列表</button>'];
+
+    if (record.type === "copy" || record.type === "storyboard") {
+      buttons.push('<button type="button" class="btn-secondary" data-action="history-export">导出 CSV</button>');
+    }
+    if (record.type === "report") {
+      buttons.push('<button type="button" class="btn-secondary" data-action="history-export">导出 .md</button>');
+    }
+    if (record.type === "copy" || record.type === "report" || record.type === "ideas") {
+      buttons.push('<button type="button" class="btn-secondary" data-action="history-copy">复制</button>');
+    }
+    if (record.type === "files") {
+      if (record.output && record.output.undone) {
+        buttons.push('<span class="history-undone-badge">已撤销</span>');
+      } else {
+        buttons.push([
+          '<button type="button" class="btn-secondary" data-action="history-undo"',
+          state.history.undoing ? " disabled" : "",
+          ">",
+          state.history.undoing ? "撤销中..." : "撤销",
+          "</button>",
+        ].join(""));
+      }
+    }
+
+    return buttons.join("");
+  }
+
+  function renderHistoryDetail() {
+    if (state.history.detailLoading) {
+      return '<div class="card card-pad"><div class="skeleton" style="height:220px"></div></div>';
+    }
+    var record = state.history.detail;
+    if (!record) {
+      return "";
+    }
+    var meta = historyTypeMeta(record.type);
+
+    return [
+      '<section class="card card-pad history-detail-card">',
+      '<div class="history-detail-head">',
+      '<span class="history-row-icon">',
+      ui.icon(meta.icon),
+      "</span><h2>",
+      ui.escapeHtml(record.title || meta.label),
+      '</h2><div class="btn-row">',
+      renderHistoryDetailActions(record),
+      "</div>",
+      '<span class="history-detail-meta">',
+      ui.escapeHtml(meta.label),
+      " · ",
+      ui.escapeHtml(formatHistoryTime(record.createdAt)),
+      "</span></div>",
+      renderHistoryDetailBody(record),
+      "</section>",
+    ].join("");
+  }
+
+  function renderHistoryList() {
+    if (state.history.loading && !state.history.list.length) {
+      return [
+        '<div class="card history-list-card">',
+        Array.from({ length: 6 }).map(function () {
+          return '<div class="history-row"><div class="skeleton" style="width:32px;height:32px"></div><div class="skeleton" style="height:18px;flex:1"></div><div class="skeleton" style="width:90px;height:14px"></div></div>';
+        }).join(""),
+        "</div>",
+      ].join("");
+    }
+
+    if (state.history.error && !state.history.list.length) {
+      return [
+        '<div class="card empty-card">',
+        '<div class="empty-icon">',
+        ui.icon("history"),
+        '</div><h2>历史记录读取失败</h2><p>',
+        ui.escapeHtml(state.history.error),
+        '</p><button type="button" class="btn-secondary" data-action="reload-history">重试</button></div>',
+      ].join("");
+    }
+
+    if (!state.history.list.length) {
+      return [
+        '<div class="card empty-card">',
+        '<div class="empty-icon">',
+        ui.icon("history"),
+        "</div><h2>还没有历史记录</h2><p>去文案工厂、分镜或周报生成一次，结果会自动存档到这里。</p></div>",
+      ].join("");
+    }
+
+    return [
+      '<div class="card history-list-card">',
+      state.history.list.map(function (item) {
+        var meta = historyTypeMeta(item.type);
+        return [
+          '<button type="button" class="history-row" data-action="open-history" data-id="',
+          ui.escapeHtml(item.id),
+          '"><span class="history-row-icon">',
+          ui.icon(meta.icon),
+          '</span><span class="history-row-title">',
+          ui.escapeHtml(item.title || meta.label),
+          '</span><span class="history-row-meta">',
+          item.count ? item.count + " 条 · " : "",
+          ui.escapeHtml(formatHistoryTime(item.createdAt)),
+          '</span><span class="history-row-arrow">',
+          ui.icon("chevron"),
+          "</span></button>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderHistoryPage(route) {
+    var showDetail = Boolean(state.history.detailId);
+
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(route.meta),
+      "</span></div>",
+      showDetail ? renderHistoryDetail() : [
+        '<div class="history-toolbar">',
+        HISTORY_FILTERS.map(function (filter) {
+          return [
+            '<button type="button" class="pill',
+            state.history.filter === filter.id ? " active" : "",
+            '" data-action="select-history-filter" data-filter="',
+            filter.id,
+            '">',
+            ui.escapeHtml(filter.label),
+            "</button>",
+          ].join("");
+        }).join(""),
+        "</div>",
+        renderHistoryList(),
+      ].join(""),
+      "</section>",
+    ].join("");
+  }
+
+  async function handleHistoryCopy() {
+    var record = state.history.detail;
+    if (!record) {
+      return;
+    }
+
+    var text = "";
+    if (record.type === "copy") {
+      text = historyCopyGroups(record.output).map(function (group) {
+        return group.items.map(function (item) {
+          return group.label + "：" + item;
+        }).join("\n");
+      }).filter(Boolean).join("\n");
+    } else if (record.type === "report") {
+      text = String(record.output || "");
+    } else if (record.type === "ideas") {
+      text = String(record.output && record.output.text || "");
+    }
+
+    if (!text) {
+      ui.showToast("没有可复制的内容", "error", 4000);
+      return;
+    }
+    await exporter.copyText(text);
+    ui.showToast("已复制", "success");
+  }
+
+  function handleHistoryExport() {
+    var record = state.history.detail;
+    if (!record) {
+      return;
+    }
+
+    if (record.type === "copy") {
+      var rows = [];
+      historyCopyGroups(record.output).forEach(function (group) {
+        group.items.forEach(function (item) {
+          rows.push([group.label, item]);
+        });
+      });
+      if (!rows.length) {
+        ui.showToast("没有可导出的内容", "error", 4000);
+        return;
+      }
+      exporter.downloadText("drama-forge-copy-" + exporter.dateStamp(new Date()) + ".csv", exporter.buildCsv(["组别", "内容"], rows), "text/csv;charset=utf-8");
+      ui.showToast("CSV 已导出", "success");
+      return;
+    }
+
+    if (record.type === "storyboard") {
+      var list = Array.isArray(record.output) ? record.output : [];
+      if (!list.length) {
+        ui.showToast("没有可导出的分镜", "error", 4000);
+        return;
+      }
+      exporter.downloadText("drama-forge-storyboard-" + exporter.dateStamp(new Date()) + ".csv", exporter.buildCsv(["镜号", "景别", "画面描述", "台词/音效", "时长"], list.map(function (row) {
+        return [row.shot, row.scale, row.visual, row.audio || "", row.duration];
+      })), "text/csv;charset=utf-8");
+      ui.showToast("CSV 已导出", "success");
+      return;
+    }
+
+    if (record.type === "report") {
+      var content = String(record.output || "");
+      if (!content) {
+        ui.showToast("没有可导出的报告", "error", 4000);
+        return;
+      }
+      var prefix = record.input && record.input.type === "day" ? "日报" : "周报";
+      exporter.downloadText(prefix + "_" + exporter.dateStamp(new Date()) + ".md", content, "text/markdown;charset=utf-8");
+      ui.showToast("Markdown 已导出", "success");
+    }
+  }
+
+  async function handleHistoryUndo() {
+    var record = state.history.detail;
+    if (!record || record.type !== "files") {
+      return;
+    }
+
+    state.history.undoing = true;
+    renderRoute();
+
+    try {
+      var result = await api.undoFiles({ historyId: record.id });
+      ui.showToast("已撤销: 还原 " + result.restored + " 个，失败 " + result.failed.length + " 条", result.failed.length ? "error" : "success", result.failed.length ? 6000 : 3200);
+      state.history.detail = await api.getHistoryDetail(record.id);
+    } catch (error) {
+      ui.showToast(error.message || "撤销失败", "error", 6000);
+    } finally {
+      state.history.undoing = false;
+      renderRoute();
+    }
+  }
+
   function currentProviderValue(config) {
     var provider = config.ai.provider || "DeepSeek";
     return PROVIDER_PRESETS.some(function (preset) {
@@ -1823,6 +2282,8 @@
       pageRoot.innerHTML = renderReportPage(route);
     } else if (route.id === "prompts") {
       pageRoot.innerHTML = renderPromptsPage(route);
+    } else if (route.id === "history") {
+      pageRoot.innerHTML = renderHistoryPage(route);
     } else {
       pageRoot.innerHTML = renderPlaceholder(route);
     }
@@ -1870,6 +2331,11 @@
     loadHotIfNeeded();
     if (window.location.hash === "#/prompts") {
       loadPrompts(false);
+    }
+    if (window.location.hash === "#/history") {
+      state.history.detailId = "";
+      state.history.detail = null;
+      loadHistory(true);
     }
   }
 
@@ -2617,6 +3083,50 @@
 
       if (action === "reload-prompts") {
         await loadPrompts(true);
+        return;
+      }
+
+      if (action === "select-history-filter") {
+        state.history.filter = actionTarget.getAttribute("data-filter") || "all";
+        state.history.detailId = "";
+        state.history.detail = null;
+        await loadHistory(true);
+        return;
+      }
+
+      if (action === "open-history") {
+        await openHistoryDetail(actionTarget.getAttribute("data-id") || "");
+        return;
+      }
+
+      if (action === "back-history") {
+        state.history.detailId = "";
+        state.history.detail = null;
+        await loadHistory(true);
+        return;
+      }
+
+      if (action === "reload-history") {
+        await loadHistory(true);
+        return;
+      }
+
+      if (action === "history-copy") {
+        try {
+          await handleHistoryCopy();
+        } catch (error) {
+          ui.showToast(error.message || "复制失败", "error", 4000);
+        }
+        return;
+      }
+
+      if (action === "history-export") {
+        handleHistoryExport();
+        return;
+      }
+
+      if (action === "history-undo") {
+        await handleHistoryUndo();
         return;
       }
 
