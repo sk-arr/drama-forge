@@ -16,6 +16,7 @@ const {
   storyboardHistoryTitle,
 } = require("./lib/generation");
 const { createHistoryStore } = require("./lib/history");
+const { createPromptLibrary } = require("./lib/prompts");
 
 const HOST = "127.0.0.1";
 const PORT = 3900;
@@ -25,6 +26,7 @@ const defaultConfigStore = createConfigStore();
 const defaultHotService = createHotCache({ dataDir: defaultConfigStore.dataDir });
 const defaultHistoryStore = createHistoryStore({ dataDir: defaultConfigStore.dataDir });
 const defaultFileOrganizer = createFileOrganizer({ historyStore: defaultHistoryStore });
+const defaultPromptLibrary = createPromptLibrary({ rootDir: ROOT_DIR, dataDir: defaultConfigStore.dataDir });
 const defaultAiService = {
   testConnection(config) {
     return testAiConnection(config.ai);
@@ -356,6 +358,9 @@ async function handleApi(req, res, pathname, services) {
   const hotService = services.hotService || (configStore === defaultConfigStore
     ? defaultHotService
     : createHotCache({ dataDir: configStore.dataDir }));
+  const promptLibrary = services.promptLibrary || (configStore === defaultConfigStore
+    ? defaultPromptLibrary
+    : createPromptLibrary({ rootDir: ROOT_DIR, dataDir: configStore.dataDir }));
   let body = {};
   if (req.method !== "GET" && req.method !== "HEAD") {
     try {
@@ -378,6 +383,33 @@ async function handleApi(req, res, pathname, services) {
   if (pathname === "/api/config" && req.method === "POST") {
     configStore.saveConfig(body);
     sendJson(res, 200, configStore.readPublicConfig());
+    return;
+  }
+
+  if (pathname === "/api/prompts" && req.method === "GET") {
+    try {
+      sendJson(res, 200, { list: promptLibrary.list() });
+    } catch (error) {
+      sendJson(res, 500, { error: error.message || "读取提示词模板失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/prompts/save" && req.method === "POST") {
+    try {
+      sendJson(res, 200, promptLibrary.save(body.name, body.content));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "保存提示词失败" });
+    }
+    return;
+  }
+
+  if (pathname === "/api/prompts/reset" && req.method === "POST") {
+    try {
+      sendJson(res, 200, promptLibrary.reset(body.name));
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "恢复默认失败" });
+    }
     return;
   }
 
