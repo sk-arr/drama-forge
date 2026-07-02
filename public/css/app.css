@@ -767,6 +767,29 @@ textarea.input {
   font-weight: 700;
 }
 
+.hot-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: 100%;
+  margin: -8px 0 14px;
+  padding: 8px 12px;
+  border: 1px solid #DBEAFE;
+  border-radius: 12px;
+  background: #F8FAFC;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.hot-notice small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .hot-top-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

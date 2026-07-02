@@ -66,3 +66,9 @@ test("hot page uses text links instead of remote image covers", () => {
   assert.doesNotMatch(css, /\.hot-cover\b/);
   assert.doesNotMatch(css, /\.play\b/);
 });
+
+test("hot source notices are rendered as product status text", () => {
+  assert.ok(appJs.includes("renderHotNotice"), "missing hot notice renderer");
+  assert.ok(appJs.includes("红果短剧当前为示例榜单"), "missing friendly Hongguo sample notice");
+  assert.ok(css.includes(".hot-notice"), "missing hot notice styles");
+});

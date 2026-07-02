@@ -293,6 +293,29 @@
     return "使用 " + hours + " 小时前缓存";
   }
 
+  function renderHotNotice(data) {
+    var note = data && data.note ? String(data.note) : "";
+    if (!note) {
+      return "";
+    }
+
+    var sourceId = data && data.source && data.source.id;
+    var title = note;
+    var detail = "";
+    if (sourceId === "duanju" && (data.example || note.indexOf("HONGGUO_API_KEY") >= 0 || note.indexOf("红果榜") >= 0)) {
+      title = "红果短剧当前为示例榜单";
+      detail = "配置密钥后可拉取真实红果榜";
+    }
+
+    return [
+      '<div class="hot-notice"><span>',
+      ui.escapeHtml(title),
+      "</span>",
+      detail ? '<small>' + ui.escapeHtml(detail) + "</small>" : "",
+      "</div>",
+    ].join("");
+  }
+
   function searchUrlFor(sourceId, title) {
     var keyword = encodeURIComponent(title || "");
     var templates = {
@@ -886,7 +909,6 @@
     var list = data && Array.isArray(data.list) ? data.list : [];
     var meta = data && data.fetchedAt ? minutesAgoText(data.fetchedAt) : getTodayMeta();
     var stale = data && data.stale;
-    var note = data && data.note ? data.note : "";
 
     return [
       '<section class="page-view">',
@@ -897,7 +919,7 @@
       "</span></div>",
       renderSourceToolbar(selectedSource),
       stale ? '<div class="cache-note">' + ui.escapeHtml(staleCacheText(data.fetchedAt)) + "</div>" : "",
-      note ? '<div class="cache-note">' + ui.escapeHtml(note) + "</div>" : "",
+      renderHotNotice(data),
       state.hot.loading ? renderHotSkeleton() : "",
       !state.hot.loading && list.length ? renderTopCards(list, selectedSource) + renderListRows(list, selectedSource) : "",
       !state.hot.loading && !list.length ? [
