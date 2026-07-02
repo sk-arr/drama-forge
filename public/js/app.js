@@ -3165,7 +3165,7 @@
     if (!window.location.hash) {
       window.location.hash = "#/hot";
     } else {
-      renderRoute();
+      handleRouteChange();
     }
     loadConfig();
   }
