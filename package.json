@@ -1,7 +1,13 @@
 {
   "name": "drama-forge",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "短剧工坊 - 围绕短剧生产、投放、团队管理的零依赖 AI 效率工具箱",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   }
 }
