@@ -551,6 +551,26 @@ async function handleApi(req, res, pathname, services) {
     return;
   }
 
+  if (pathname === "/api/history/trash" && req.method === "GET") {
+    sendJson(res, 200, { list: historyStore.listTrash() });
+    return;
+  }
+
+  if (pathname === "/api/history/trash/restore" && req.method === "POST") {
+    const id = body && body.id ? String(body.id) : "";
+    if (!historyStore.restore(id)) {
+      sendJson(res, 404, { error: "回收站里没有这条记录" });
+      return;
+    }
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (pathname === "/api/history/trash" && req.method === "DELETE") {
+    sendJson(res, 200, { ok: true, removed: historyStore.emptyTrash() });
+    return;
+  }
+
   if (pathname.startsWith("/api/history/") && req.method === "GET") {
     let id = "";
     try {

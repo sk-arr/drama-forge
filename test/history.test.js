@@ -58,7 +58,7 @@ test("lists history summaries in reverse chronological order with optional type 
   }
 });
 
-test("removes a single record by id and rejects unsafe ids", () => {
+test("remove moves a record into the trash and rejects unsafe ids", () => {
   const dataDir = makeDataDir();
   const store = createHistoryStore({ dataDir });
 
@@ -71,9 +71,77 @@ test("removes a single record by id and rejects unsafe ids", () => {
     assert.equal(fs.existsSync(path.join(dataDir, "history", `${saved.id}.json`)), false);
     assert.deepEqual(store.list().map((item) => item.id), [kept.id]);
 
+    const trashed = store.listTrash();
+    assert.equal(trashed.length, 1);
+    assert.equal(trashed[0].id, saved.id);
+    assert.ok(trashed[0].deletedAt);
+
     assert.equal(store.remove(saved.id), false);
     assert.equal(store.remove(""), false);
     assert.equal(store.remove("../config"), false);
+  } finally {
+    removeDir(dataDir);
+  }
+});
+
+test("restore moves a trashed record back and drops deletedAt", () => {
+  const dataDir = makeDataDir();
+  const store = createHistoryStore({ dataDir });
+
+  try {
+    const saved = store.save("copy", "先删后恢复", {}, { titles: ["x"] });
+    store.remove(saved.id);
+
+    assert.equal(store.restore(saved.id), true);
+    const record = store.get(saved.id);
+    assert.equal(record.title, "先删后恢复");
+    assert.equal(record.deletedAt, undefined);
+    assert.equal(store.listTrash().length, 0);
+
+    assert.equal(store.restore(saved.id), false);
+    assert.equal(store.restore("../config"), false);
+  } finally {
+    removeDir(dataDir);
+  }
+});
+
+test("emptyTrash deletes everything in the trash permanently", () => {
+  const dataDir = makeDataDir();
+  const store = createHistoryStore({ dataDir });
+
+  try {
+    const first = store.save("copy", "一", {}, { titles: ["x"] });
+    const second = store.save("report", "二", {}, "内容");
+    store.remove(first.id);
+    store.remove(second.id);
+
+    assert.equal(store.emptyTrash(), 2);
+    assert.equal(store.listTrash().length, 0);
+    assert.equal(store.restore(first.id), false);
+  } finally {
+    removeDir(dataDir);
+  }
+});
+
+test("trash entries older than 30 days are purged automatically", () => {
+  const dataDir = makeDataDir();
+  const store = createHistoryStore({ dataDir });
+
+  try {
+    const fresh = store.save("copy", "新删除", {}, { titles: ["x"] });
+    store.remove(fresh.id);
+
+    const staleId = "20250101000000000-stale";
+    const staleDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+    fs.writeFileSync(
+      path.join(store.trashDir, `${staleId}.json`),
+      JSON.stringify({ id: staleId, type: "copy", title: "过期", createdAt: staleDate, deletedAt: staleDate, input: {}, output: null }),
+      "utf8"
+    );
+
+    const trashed = store.listTrash();
+    assert.deepEqual(trashed.map((item) => item.id), [fresh.id]);
+    assert.equal(fs.existsSync(path.join(store.trashDir, `${staleId}.json`)), false);
   } finally {
     removeDir(dataDir);
   }

@@ -156,6 +156,11 @@
       detailLoading: false,
       undoing: false,
       deleting: false,
+      view: "list",
+      trash: [],
+      trashLoading: false,
+      trashError: "",
+      emptying: false,
     },
   };
 
@@ -1807,6 +1812,25 @@
     }
   }
 
+  async function loadTrash(force) {
+    if (state.history.trashLoading) {
+      return;
+    }
+    state.history.trashLoading = true;
+    state.history.trashError = "";
+    renderRoute();
+
+    try {
+      var payload = await api.getTrash();
+      state.history.trash = Array.isArray(payload.list) ? payload.list : [];
+    } catch (error) {
+      state.history.trashError = error.message || "回收站读取失败";
+    } finally {
+      state.history.trashLoading = false;
+      renderRoute();
+    }
+  }
+
   async function openHistoryDetail(id) {
     state.history.detailId = id;
     state.history.detail = null;
@@ -2104,17 +2128,90 @@
     ].join("");
   }
 
-  function renderHistoryPage(route) {
-    var showDetail = Boolean(state.history.detailId);
+  function renderTrashList() {
+    if (state.history.trashLoading && !state.history.trash.length) {
+      return [
+        '<div class="card history-list-card">',
+        Array.from({ length: 4 }).map(function () {
+          return '<div class="history-row"><div class="skeleton" style="width:32px;height:32px"></div><div class="skeleton" style="height:18px;flex:1"></div><div class="skeleton" style="width:90px;height:14px"></div></div>';
+        }).join(""),
+        "</div>",
+      ].join("");
+    }
+
+    if (state.history.trashError && !state.history.trash.length) {
+      return [
+        '<div class="card empty-card">',
+        '<div class="empty-icon">',
+        ui.icon("trash"),
+        '</div><h2>回收站读取失败</h2><p>',
+        ui.escapeHtml(state.history.trashError),
+        '</p><button type="button" class="btn-secondary" data-action="reload-trash">重试</button></div>',
+      ].join("");
+    }
+
+    if (!state.history.trash.length) {
+      return [
+        '<div class="card empty-card">',
+        '<div class="empty-icon">',
+        ui.icon("trash"),
+        "</div><h2>回收站是空的</h2><p>删除的历史记录会先放到这里，保留 30 天后自动清除。</p></div>",
+      ].join("");
+    }
 
     return [
-      '<section class="page-view">',
-      '<div class="page-head"><h1 class="page-title">',
-      route.title,
-      '</h1><span class="page-meta">',
-      ui.escapeHtml(route.meta),
-      "</span></div>",
-      showDetail ? renderHistoryDetail() : [
+      '<div class="card history-list-card">',
+      state.history.trash.map(function (item) {
+        var meta = historyTypeMeta(item.type);
+        return [
+          '<div class="history-row">',
+          '<span class="history-row-icon history-row-icon-muted">',
+          ui.icon(meta.icon),
+          '</span><span class="history-row-title">',
+          ui.escapeHtml(item.title || meta.label),
+          '</span><span class="history-row-meta">',
+          "删除于 ",
+          ui.escapeHtml(formatHistoryTime(item.deletedAt)),
+          "</span>",
+          '<button type="button" class="history-row-restore" data-action="restore-history" data-id="',
+          ui.escapeHtml(item.id),
+          '" title="恢复" aria-label="恢复这条记录">',
+          ui.icon("restore"),
+          "</button>",
+          "</div>",
+        ].join("");
+      }).join(""),
+      "</div>",
+    ].join("");
+  }
+
+  function renderTrashView() {
+    return [
+      '<div class="history-toolbar">',
+      '<button type="button" class="btn-secondary" data-action="close-trash">返回列表</button>',
+      '<span class="history-trash-note">回收站保留 30 天，到期自动清除</span>',
+      state.history.trash.length ? [
+        '<button type="button" class="btn-secondary btn-danger history-trash-empty" data-action="empty-trash"',
+        state.history.emptying ? " disabled" : "",
+        ">",
+        state.history.emptying ? "清空中..." : "清空回收站",
+        "</button>",
+      ].join("") : "",
+      "</div>",
+      renderTrashList(),
+    ].join("");
+  }
+
+  function renderHistoryPage(route) {
+    var showDetail = Boolean(state.history.detailId);
+    var body;
+
+    if (showDetail) {
+      body = renderHistoryDetail();
+    } else if (state.history.view === "trash") {
+      body = renderTrashView();
+    } else {
+      body = [
         '<div class="history-toolbar">',
         HISTORY_FILTERS.map(function (filter) {
           return [
@@ -2127,9 +2224,22 @@
             "</button>",
           ].join("");
         }).join(""),
+        '<button type="button" class="pill history-trash-entry" data-action="open-trash">',
+        ui.icon("trash"),
+        "回收站</button>",
         "</div>",
         renderHistoryList(),
-      ].join(""),
+      ].join("");
+    }
+
+    return [
+      '<section class="page-view">',
+      '<div class="page-head"><h1 class="page-title">',
+      route.title,
+      '</h1><span class="page-meta">',
+      ui.escapeHtml(route.meta),
+      "</span></div>",
+      body,
       "</section>",
     ].join("");
   }
@@ -2212,9 +2322,6 @@
     if (!id || state.history.deleting) {
       return;
     }
-    if (!window.confirm("删除后不可恢复，确定删除这条历史记录吗？")) {
-      return;
-    }
 
     state.history.deleting = true;
     try {
@@ -2223,13 +2330,47 @@
         state.history.detailId = "";
         state.history.detail = null;
       }
-      ui.showToast("已删除", "success");
+      ui.showToast("已移入回收站，30 天内可恢复", "success");
     } catch (error) {
       ui.showToast(error.message || "删除失败", "error", 6000);
     } finally {
       state.history.deleting = false;
     }
     await loadHistory(true);
+  }
+
+  async function handleRestoreHistory(id) {
+    if (!id) {
+      return;
+    }
+    try {
+      await api.restoreHistory(id);
+      ui.showToast("已恢复到历史记录", "success");
+    } catch (error) {
+      ui.showToast(error.message || "恢复失败", "error", 6000);
+    }
+    await loadTrash(true);
+  }
+
+  async function handleEmptyTrash() {
+    if (state.history.emptying || !state.history.trash.length) {
+      return;
+    }
+    if (!window.confirm("清空后这些记录将彻底删除，无法再恢复，确定清空回收站吗？")) {
+      return;
+    }
+
+    state.history.emptying = true;
+    renderRoute();
+    try {
+      var result = await api.emptyTrash();
+      ui.showToast("回收站已清空（" + (result.removed || 0) + " 条）", "success");
+    } catch (error) {
+      ui.showToast(error.message || "清空失败", "error", 6000);
+    } finally {
+      state.history.emptying = false;
+    }
+    await loadTrash(true);
   }
 
   async function handleHistoryUndo() {
@@ -2481,6 +2622,7 @@
     if (window.location.hash === "#/history") {
       state.history.detailId = "";
       state.history.detail = null;
+      state.history.view = "list";
       loadHistory(true);
     }
   }
@@ -3278,6 +3420,33 @@
 
       if (action === "delete-history") {
         await handleHistoryDelete(actionTarget.getAttribute("data-id") || "");
+        return;
+      }
+
+      if (action === "open-trash") {
+        state.history.view = "trash";
+        await loadTrash(true);
+        return;
+      }
+
+      if (action === "close-trash") {
+        state.history.view = "list";
+        await loadHistory(true);
+        return;
+      }
+
+      if (action === "reload-trash") {
+        await loadTrash(true);
+        return;
+      }
+
+      if (action === "restore-history") {
+        await handleRestoreHistory(actionTarget.getAttribute("data-id") || "");
+        return;
+      }
+
+      if (action === "empty-trash") {
+        await handleEmptyTrash();
         return;
       }
 

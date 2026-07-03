@@ -76,7 +76,7 @@ test("GET /api/history/{id} returns full record and 404 for missing", async () =
   }
 });
 
-test("DELETE /api/history/{id} removes the record and 404s for missing", async () => {
+test("DELETE /api/history/{id} moves the record to trash and 404s for missing", async () => {
   const dataDir = makeDataDir();
   const configStore = createConfigStore({ dataDir });
   const historyStore = createHistoryStore({ dataDir });
@@ -96,6 +96,49 @@ test("DELETE /api/history/{id} removes the record and 404s for missing", async (
 
     const remaining = await (await fetch(`http://127.0.0.1:${port}/api/history`)).json();
     assert.equal(remaining.list.length, 0);
+
+    const trash = await (await fetch(`http://127.0.0.1:${port}/api/history/trash`)).json();
+    assert.equal(trash.list.length, 1);
+    assert.equal(trash.list[0].id, saved.id);
+    assert.ok(trash.list[0].deletedAt);
+  } finally {
+    await close(server);
+    removeDir(dataDir);
+  }
+});
+
+test("trash restore and empty endpoints work end to end", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+  const historyStore = createHistoryStore({ dataDir });
+  const first = historyStore.save("copy", "第一条", {}, { titles: ["x"] });
+  const second = historyStore.save("report", "第二条", {}, "内容");
+  historyStore.remove(first.id);
+  historyStore.remove(second.id);
+
+  const server = createServer({ configStore, historyStore });
+  const port = await listen(server);
+
+  try {
+    const restored = await fetch(`http://127.0.0.1:${port}/api/history/trash/restore`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: first.id }),
+    });
+    assert.equal(restored.status, 200);
+    assert.equal(historyStore.get(first.id).title, "第一条");
+
+    const missing = await fetch(`http://127.0.0.1:${port}/api/history/trash/restore`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "not-there" }),
+    });
+    assert.equal(missing.status, 404);
+
+    const emptied = await fetch(`http://127.0.0.1:${port}/api/history/trash`, { method: "DELETE" });
+    assert.equal(emptied.status, 200);
+    assert.deepEqual(await emptied.json(), { ok: true, removed: 1 });
+    assert.equal(historyStore.listTrash().length, 0);
   } finally {
     await close(server);
     removeDir(dataDir);
