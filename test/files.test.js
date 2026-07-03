@@ -62,7 +62,8 @@ test("scan rejects path traversal in rename template", () => {
 
 test("execute blocks plans that leave the selected directory", () => {
   const dir = makeTmpDir("execute-block");
-  const organizer = createFileOrganizer();
+  const historyStore = createHistoryStore({ dataDir: path.join(dir, ".data") });
+  const organizer = createFileOrganizer({ historyStore });
 
   try {
     writeFile(path.join(dir, "a.mp4"));

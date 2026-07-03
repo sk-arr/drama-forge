@@ -547,7 +547,10 @@ async function handleApi(req, res, pathname, services) {
   if (pathname === "/api/history" && req.method === "GET") {
     const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
     const type = url.searchParams.get("type") || "";
-    sendJson(res, 200, { list: historyStore.list(type || undefined) });
+    sendJson(res, 200, {
+      list: historyStore.list(type || undefined),
+      trashCount: historyStore.listTrash().length,
+    });
     return;
   }
 

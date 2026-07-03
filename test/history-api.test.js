@@ -43,6 +43,7 @@ test("GET /api/history returns summaries and supports type filter", async () => 
   try {
     const all = await (await fetch(`http://127.0.0.1:${port}/api/history`)).json();
     assert.equal(all.list.length, 2);
+    assert.equal(all.trashCount, 0);
 
     const onlyIdeas = await (await fetch(`http://127.0.0.1:${port}/api/history?type=ideas`)).json();
     assert.equal(onlyIdeas.list.length, 1);

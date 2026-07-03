@@ -47,11 +47,24 @@
     return region;
   }
 
-  function showToast(message, type, duration) {
+  function showToast(message, type, duration, action) {
     var region = ensureToastRegion();
     var toast = document.createElement("div");
     toast.className = "toast " + (type || "success");
     toast.textContent = message;
+
+    if (action && action.label && typeof action.onClick === "function") {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "toast-action";
+      button.textContent = action.label;
+      button.addEventListener("click", function () {
+        toast.remove();
+        action.onClick();
+      });
+      toast.appendChild(button);
+    }
+
     region.appendChild(toast);
 
     window.setTimeout(function () {

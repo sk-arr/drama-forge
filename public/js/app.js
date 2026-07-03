@@ -158,6 +158,7 @@
       deleting: false,
       view: "list",
       trash: [],
+      trashCount: 0,
       trashLoading: false,
       trashError: "",
       emptying: false,
@@ -1792,6 +1793,33 @@
     return (date.getMonth() + 1) + "月" + date.getDate() + "日 " + date.getHours() + ":" + (minutes.length < 2 ? "0" + minutes : minutes);
   }
 
+  function formatHistoryClock(isoText) {
+    var date = new Date(isoText || "");
+    if (!Number.isFinite(date.getTime())) {
+      return "";
+    }
+    var minutes = String(date.getMinutes());
+    return date.getHours() + ":" + (minutes.length < 2 ? "0" + minutes : minutes);
+  }
+
+  function historyDayLabel(isoText) {
+    var date = new Date(isoText || "");
+    if (!Number.isFinite(date.getTime())) {
+      return "更早";
+    }
+    var startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    var now = new Date();
+    var startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var diffDays = Math.round((startOfToday - startOfDay) / 86400000);
+    if (diffDays <= 0) {
+      return "今天";
+    }
+    if (diffDays === 1) {
+      return "昨天";
+    }
+    return (date.getMonth() + 1) + "月" + date.getDate() + "日";
+  }
+
   async function loadHistory(force) {
     if (state.history.loading || (state.history.loaded && !force)) {
       return;
@@ -1803,6 +1831,7 @@
     try {
       var payload = await api.getHistory(state.history.filter);
       state.history.list = Array.isArray(payload.list) ? payload.list : [];
+      state.history.trashCount = payload.trashCount || 0;
       state.history.loaded = true;
     } catch (error) {
       state.history.error = error.message || "历史记录读取失败";
@@ -2098,11 +2127,18 @@
       ].join("");
     }
 
+    var lastLabel = "";
     return [
       '<div class="card history-list-card">',
       state.history.list.map(function (item) {
         var meta = historyTypeMeta(item.type);
-        return [
+        var dayLabel = historyDayLabel(item.createdAt);
+        var parts = [];
+        if (dayLabel !== lastLabel) {
+          lastLabel = dayLabel;
+          parts.push('<div class="history-group-label">' + ui.escapeHtml(dayLabel) + "</div>");
+        }
+        parts.push([
           '<div class="history-row">',
           '<button type="button" class="history-row-main" data-action="open-history" data-id="',
           ui.escapeHtml(item.id),
@@ -2112,7 +2148,7 @@
           ui.escapeHtml(item.title || meta.label),
           '</span><span class="history-row-meta">',
           item.count ? item.count + " 条 · " : "",
-          ui.escapeHtml(formatHistoryTime(item.createdAt)),
+          ui.escapeHtml(formatHistoryClock(item.createdAt)),
           '</span><span class="history-row-arrow">',
           ui.icon("chevron"),
           "</span></button>",
@@ -2122,7 +2158,8 @@
           ui.icon("trash"),
           "</button>",
           "</div>",
-        ].join("");
+        ].join(""));
+        return parts.join("");
       }).join(""),
       "</div>",
     ].join("");
@@ -2226,7 +2263,9 @@
         }).join(""),
         '<button type="button" class="pill history-trash-entry" data-action="open-trash">',
         ui.icon("trash"),
-        "回收站</button>",
+        "回收站",
+        state.history.trashCount ? '<span class="history-trash-count">' + state.history.trashCount + "</span>" : "",
+        "</button>",
         "</div>",
         renderHistoryList(),
       ].join("");
@@ -2330,13 +2369,32 @@
         state.history.detailId = "";
         state.history.detail = null;
       }
-      ui.showToast("已移入回收站，30 天内可恢复", "success");
+      ui.showToast("已移入回收站，30 天内可恢复", "success", 6000, {
+        label: "撤销",
+        onClick: function () {
+          handleUndoDelete(id);
+        },
+      });
     } catch (error) {
       ui.showToast(error.message || "删除失败", "error", 6000);
     } finally {
       state.history.deleting = false;
     }
     await loadHistory(true);
+  }
+
+  async function handleUndoDelete(id) {
+    try {
+      await api.restoreHistory(id);
+      ui.showToast("已恢复", "success");
+    } catch (error) {
+      ui.showToast(error.message || "恢复失败", "error", 6000);
+    }
+    if (state.history.view === "trash") {
+      await loadTrash(true);
+    } else {
+      await loadHistory(true);
+    }
   }
 
   async function handleRestoreHistory(id) {
