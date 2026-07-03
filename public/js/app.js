@@ -89,6 +89,11 @@
       ideasText: "",
       ideasCards: [],
     },
+    pool: {
+      loaded: false,
+      loading: false,
+      list: [],
+    },
     copy: {
       title: "",
       genre: "女频逆袭",
@@ -807,17 +812,29 @@
   function renderTopCards(list, sourceId) {
     var topLabels = ["TOP 1", "TOP 2", "TOP 3"];
     var sourceLabel = sourceLabelFor(sourceId);
+    var collected = poolTitleSet();
     return [
       '<div class="hot-top-grid">',
       list.slice(0, 3).map(function (item, index) {
         var url = itemUrl(sourceId, item);
+        var starred = Boolean(collected[item.title]);
         return [
           '<div class="hot-card">',
           '<div class="hot-card-head"><span class="rank-badge">',
           ui.escapeHtml(topLabels[index]),
           '</span><span class="source-chip">',
           ui.escapeHtml(sourceLabel),
-          '</span><a class="hot-card-action" href="',
+          '</span><button type="button" class="hot-star',
+          starred ? " starred" : "",
+          '" data-action="pool-add" data-title="',
+          ui.escapeHtml(item.title),
+          '" data-heat="',
+          ui.escapeHtml(item.heat || ""),
+          '" title="收藏到选题池" aria-label="收藏 ',
+          ui.escapeHtml(item.title),
+          '">',
+          ui.icon("star"),
+          '</button><a class="hot-card-action" href="',
           ui.escapeHtml(url),
           '" target="_blank" rel="noreferrer" aria-label="打开 ',
           ui.escapeHtml(item.title),
@@ -838,10 +855,12 @@
   }
 
   function renderListRows(list, sourceId) {
+    var collected = poolTitleSet();
     return [
       '<div class="hot-list-card card">',
       list.slice(3, 10).map(function (item) {
         var url = itemUrl(sourceId, item);
+        var starred = Boolean(collected[item.title]);
         return [
           '<div class="hot-list-row">',
           '<span class="row-rank">',
@@ -852,7 +871,17 @@
           ui.escapeHtml(item.title),
           '</a><span class="row-heat">',
           ui.escapeHtml(item.heat || ""),
-          '</span><a class="row-arrow" href="',
+          '</span><button type="button" class="hot-star',
+          starred ? " starred" : "",
+          '" data-action="pool-add" data-title="',
+          ui.escapeHtml(item.title),
+          '" data-heat="',
+          ui.escapeHtml(item.heat || ""),
+          '" title="收藏到选题池" aria-label="收藏 ',
+          ui.escapeHtml(item.title),
+          '">',
+          ui.icon("star"),
+          '</button><a class="row-arrow" href="',
           ui.escapeHtml(url),
           '" target="_blank" rel="noreferrer" aria-label="打开 ',
           ui.escapeHtml(item.title),
@@ -862,6 +891,40 @@
         ].join("");
       }).join(""),
       "</div>",
+    ].join("");
+  }
+
+  function renderPoolPanel() {
+    if (!state.pool.list.length) {
+      return "";
+    }
+    return [
+      '<div class="card card-pad pool-panel">',
+      '<div class="pool-head"><span class="pool-title">',
+      ui.icon("star"),
+      "选题池 · ",
+      String(state.pool.list.length),
+      ' 条</span><span class="pool-hint">点选题直接去写文案</span></div>',
+      '<div class="pool-chips">',
+      state.pool.list.map(function (item) {
+        return [
+          '<span class="pool-chip">',
+          '<button type="button" class="pool-chip-title" data-action="pool-copy" data-title="',
+          ui.escapeHtml(item.title),
+          '" title="带着这个选题去文案工厂">',
+          ui.escapeHtml(item.title),
+          "</button>",
+          item.source ? '<span class="pool-chip-source">' + ui.escapeHtml(item.source) + "</span>" : "",
+          '<button type="button" class="pool-chip-remove" data-action="pool-remove" data-id="',
+          ui.escapeHtml(item.id),
+          '" title="移出选题池" aria-label="移出 ',
+          ui.escapeHtml(item.title),
+          '">',
+          ui.icon("x"),
+          "</button></span>",
+        ].join("");
+      }).join(""),
+      "</div></div>",
     ].join("");
   }
 
@@ -928,6 +991,7 @@
       stale ? '<div class="cache-note">' + ui.escapeHtml(staleCacheText(data.fetchedAt)) + "</div>" : "",
       renderHotNotice(data),
       state.hot.loading ? renderHotSkeleton() : "",
+      renderPoolPanel(),
       !state.hot.loading && list.length ? renderTopCards(list, selectedSource) + renderListRows(list, selectedSource) : "",
       !state.hot.loading && !list.length ? [
         '<div class="card empty-card">',
@@ -2639,10 +2703,36 @@
     if (window.location.hash !== "#/hot" || !state.config) {
       return;
     }
+    loadPool(false);
     var sourceId = ensureHotSource();
     if (!state.hot.loading && (!state.hot.data || !state.hot.data.source || state.hot.data.source.id !== sourceId)) {
       loadHot(false);
     }
+  }
+
+  async function loadPool(force) {
+    if (state.pool.loading || (state.pool.loaded && !force)) {
+      return;
+    }
+    state.pool.loading = true;
+    try {
+      var payload = await api.getPool();
+      state.pool.list = Array.isArray(payload.list) ? payload.list : [];
+      state.pool.loaded = true;
+      renderRoute();
+    } catch (error) {
+      state.pool.loaded = true;
+    } finally {
+      state.pool.loading = false;
+    }
+  }
+
+  function poolTitleSet() {
+    var set = {};
+    state.pool.list.forEach(function (item) {
+      set[item.title] = true;
+    });
+    return set;
   }
 
   async function loadHot(force) {
@@ -2775,6 +2865,44 @@
       }
       updateConnectionStatus();
       renderRoute();
+    }
+  }
+
+  async function handlePoolAdd(target) {
+    var title = target.getAttribute("data-title") || "";
+    if (!title) {
+      return;
+    }
+    try {
+      var result = await api.addToPool({
+        title: title,
+        source: sourceLabelFor(ensureHotSource()),
+        heat: target.getAttribute("data-heat") || "",
+      });
+      if (result.duplicated) {
+        ui.showToast("已经在选题池里了", "success");
+        return;
+      }
+      state.pool.list.unshift(result.item);
+      ui.showToast("已收藏到选题池", "success");
+      renderRoute();
+    } catch (error) {
+      ui.showToast(error.message || "收藏失败", "error", 6000);
+    }
+  }
+
+  async function handlePoolRemove(id) {
+    if (!id) {
+      return;
+    }
+    try {
+      await api.removeFromPool(id);
+      state.pool.list = state.pool.list.filter(function (item) {
+        return item.id !== id;
+      });
+      renderRoute();
+    } catch (error) {
+      ui.showToast(error.message || "移除失败", "error", 6000);
     }
   }
 
@@ -3397,6 +3525,24 @@
           title: actionTarget.getAttribute("data-title") || "",
           genre: actionTarget.getAttribute("data-genre") || "其他自定义",
           sellingPoint: actionTarget.getAttribute("data-logic") || "",
+        }));
+        window.location.hash = "#/copy";
+        return;
+      }
+
+      if (action === "pool-add") {
+        await handlePoolAdd(actionTarget);
+        return;
+      }
+
+      if (action === "pool-remove") {
+        await handlePoolRemove(actionTarget.getAttribute("data-id") || "");
+        return;
+      }
+
+      if (action === "pool-copy") {
+        window.sessionStorage.setItem("drama-forge:copy-seed", JSON.stringify({
+          title: actionTarget.getAttribute("data-title") || "",
         }));
         window.location.hash = "#/copy";
         return;

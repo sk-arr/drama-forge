@@ -189,6 +189,23 @@
     });
   }
 
+  function getPool() {
+    return requestJson("/api/pool");
+  }
+
+  function addToPool(payload) {
+    return requestJson("/api/pool", {
+      method: "POST",
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  function removeFromPool(id) {
+    return requestJson("/api/pool/" + encodeURIComponent(id || ""), {
+      method: "DELETE",
+    });
+  }
+
   function browseFiles(dirPath) {
     var params = new URLSearchParams();
     if (dirPath) {
@@ -219,6 +236,7 @@
   }
 
   window.DramaForgeApi = {
+    addToPool: addToPool,
     browseFiles: browseFiles,
     deleteHistory: deleteHistory,
     emptyTrash: emptyTrash,
@@ -231,8 +249,10 @@
     getHistory: getHistory,
     getHistoryDetail: getHistoryDetail,
     getHot: getHot,
+    getPool: getPool,
     getTrash: getTrash,
     getPrompts: getPrompts,
+    removeFromPool: removeFromPool,
     resetPrompt: resetPrompt,
     restoreHistory: restoreHistory,
     saveConfig: saveConfig,

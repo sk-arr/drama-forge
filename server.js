@@ -18,6 +18,7 @@ const {
   storyboardHistoryTitle,
 } = require("./lib/generation");
 const { createHistoryStore } = require("./lib/history");
+const { createIdeaPool } = require("./lib/pool");
 const { createPromptLibrary } = require("./lib/prompts");
 const demoMock = require("./lib/mock");
 
@@ -30,6 +31,7 @@ const defaultHotService = createHotCache({ dataDir: defaultConfigStore.dataDir }
 const defaultHistoryStore = createHistoryStore({ dataDir: defaultConfigStore.dataDir });
 const defaultFileOrganizer = createFileOrganizer({ historyStore: defaultHistoryStore });
 const defaultPromptLibrary = createPromptLibrary({ rootDir: ROOT_DIR, dataDir: defaultConfigStore.dataDir });
+const defaultIdeaPool = createIdeaPool({ dataDir: defaultConfigStore.dataDir });
 const defaultAiService = {
   testConnection(config) {
     return testAiConnection(config.ai);
@@ -268,6 +270,9 @@ async function handleApi(req, res, pathname, services) {
   const promptLibrary = services.promptLibrary || (configStore === defaultConfigStore
     ? defaultPromptLibrary
     : createPromptLibrary({ rootDir: ROOT_DIR, dataDir: configStore.dataDir }));
+  const ideaPool = services.ideaPool || (configStore === defaultConfigStore
+    ? defaultIdeaPool
+    : createIdeaPool({ dataDir: configStore.dataDir }));
   let body = {};
   if (req.method !== "GET" && req.method !== "HEAD") {
     try {
@@ -551,6 +556,38 @@ async function handleApi(req, res, pathname, services) {
       list: historyStore.list(type || undefined),
       trashCount: historyStore.listTrash().length,
     });
+    return;
+  }
+
+  if (pathname === "/api/pool" && req.method === "GET") {
+    sendJson(res, 200, { list: ideaPool.list() });
+    return;
+  }
+
+  if (pathname === "/api/pool" && req.method === "POST") {
+    try {
+      const result = ideaPool.add(body || {});
+      sendJson(res, 200, { ok: true, duplicated: result.duplicated, item: result.item });
+    } catch (error) {
+      sendJson(res, 400, { error: error.message || "加入选题池失败" });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/pool/") && req.method === "DELETE") {
+    let id = "";
+    try {
+      id = decodeURIComponent(pathname.slice("/api/pool/".length));
+    } catch (error) {
+      sendJson(res, 400, { error: "编号不合法" });
+      return;
+    }
+
+    if (!ideaPool.remove(id)) {
+      sendJson(res, 404, { error: "选题池里没有这条记录" });
+      return;
+    }
+    sendJson(res, 200, { ok: true });
     return;
   }
 
