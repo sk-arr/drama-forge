@@ -1518,7 +1518,9 @@
       selectedCount,
       ' 条</button><button type="button" class="btn-secondary" data-action="export-copy"',
       totalCount ? "" : " disabled",
-      ">导出 CSV</button></div>",
+      '>导出 CSV</button><button type="button" class="btn-secondary" data-action="send-storyboard"',
+      totalCount ? "" : " disabled",
+      ">去分镜</button></div>",
       "</section>",
     ].join("");
   }
@@ -1588,7 +1590,34 @@
     }).join("");
   }
 
+  function hydrateStoryboardFromSeed() {
+    var raw = "";
+    try {
+      raw = window.sessionStorage.getItem("drama-forge:storyboard-seed") || "";
+      if (raw) {
+        window.sessionStorage.removeItem("drama-forge:storyboard-seed");
+      }
+    } catch (error) {
+      raw = "";
+    }
+
+    if (!raw) {
+      return;
+    }
+
+    try {
+      var seed = JSON.parse(raw);
+      if (seed.script) {
+        state.storyboard.script = seed.script;
+        ui.showToast("已带入文案工厂的草稿，补充剧情后生成分镜", "success");
+      }
+    } catch (error) {
+      return;
+    }
+  }
+
   function renderStoryboardPage(route) {
+    hydrateStoryboardFromSeed();
     var hasRows = state.storyboard.list.length > 0;
     return [
       '<section class="page-view">',
@@ -3031,6 +3060,38 @@
     ui.showToast("已复制选中内容", "success");
   }
 
+  function handleSendToStoryboard() {
+    var rows = selectedCopyRows().filter(function (row) {
+      return row.group === "hooks" || row.group === "intros";
+    });
+    if (!rows.length) {
+      ui.showToast("先勾选开场钩子或简介，再发到分镜", "error", 4000);
+      return;
+    }
+
+    collectCopyForm();
+    var lines = [];
+    if (state.copy.title) {
+      lines.push("《" + state.copy.title + "》");
+    }
+    var genre = state.copy.genre === "其他自定义" ? state.copy.customGenre : state.copy.genre;
+    if (genre) {
+      lines.push("题材：" + genre);
+    }
+    if (state.copy.sellingPoint) {
+      lines.push("剧情卖点：" + state.copy.sellingPoint);
+    }
+    lines.push("");
+    rows.forEach(function (row) {
+      lines.push(row.groupLabel + "：" + row.text);
+    });
+
+    window.sessionStorage.setItem("drama-forge:storyboard-seed", JSON.stringify({
+      script: lines.join("\n"),
+    }));
+    window.location.hash = "#/storyboard";
+  }
+
   function handleExportCopy() {
     var rows = flattenCopyRows(false);
     if (!rows.length) {
@@ -3440,6 +3501,11 @@
 
       if (action === "export-copy") {
         handleExportCopy();
+        return;
+      }
+
+      if (action === "send-storyboard") {
+        handleSendToStoryboard();
         return;
       }
 
