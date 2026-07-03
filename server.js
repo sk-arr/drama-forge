@@ -569,6 +569,23 @@ async function handleApi(req, res, pathname, services) {
     return;
   }
 
+  if (pathname.startsWith("/api/history/") && req.method === "DELETE") {
+    let id = "";
+    try {
+      id = decodeURIComponent(pathname.slice("/api/history/".length));
+    } catch (error) {
+      sendJson(res, 400, { error: "记录编号不合法" });
+      return;
+    }
+
+    if (!historyStore.remove(id)) {
+      sendJson(res, 404, { error: "历史记录不存在或已被清理" });
+      return;
+    }
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
   if (pathname === "/api/hot" && req.method === "GET") {
     const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
     const sourceId = url.searchParams.get("source") || "douyin";

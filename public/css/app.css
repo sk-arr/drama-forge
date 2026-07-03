@@ -2067,13 +2067,48 @@ textarea.input {
   gap: 12px;
   width: 100%;
   padding: 13px 2px;
-  border: 0;
   border-bottom: 1px solid #EEF2F7;
+  font-size: 14px;
+  transition: var(--transition-fast);
+}
+
+.history-row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
   background: transparent;
   text-align: left;
-  font-size: 14px;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.history-row-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
   cursor: pointer;
   transition: var(--transition-fast);
+}
+
+.history-row-delete:hover {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.history-row-delete svg {
+  width: 15px;
+  height: 15px;
 }
 
 .history-row:last-child {
@@ -2181,6 +2216,17 @@ textarea.input {
   color: var(--primary);
 }
 
+.btn-danger {
+  color: #DC2626;
+  border-color: #FECACA;
+}
+
+.btn-secondary.btn-danger:hover:not(:disabled) {
+  color: #DC2626;
+  background: #FEF2F2;
+  border-color: #FCA5A5;
+}
+
 .history-undone-badge {
   padding: 2px 10px;
   border-radius: var(--radius-button);
@@ -2203,7 +2249,7 @@ select:focus-visible,
 textarea:focus-visible,
 .toggle:focus-visible,
 .pill:focus-visible,
-.history-row:focus-visible,
+.history-row-main:focus-visible,
 .prompt-card-head:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;

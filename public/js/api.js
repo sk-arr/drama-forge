@@ -166,6 +166,12 @@
     return requestJson("/api/history/" + encodeURIComponent(id || ""));
   }
 
+  function deleteHistory(id) {
+    return requestJson("/api/history/" + encodeURIComponent(id || ""), {
+      method: "DELETE",
+    });
+  }
+
   function browseFiles(dirPath) {
     var params = new URLSearchParams();
     if (dirPath) {
@@ -197,6 +203,7 @@
 
   window.DramaForgeApi = {
     browseFiles: browseFiles,
+    deleteHistory: deleteHistory,
     executeFiles: executeFiles,
     generateCopy: generateCopy,
     generateIdeas: generateIdeas,

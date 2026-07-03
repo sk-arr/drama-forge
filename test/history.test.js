@@ -58,6 +58,27 @@ test("lists history summaries in reverse chronological order with optional type 
   }
 });
 
+test("removes a single record by id and rejects unsafe ids", () => {
+  const dataDir = makeDataDir();
+  const store = createHistoryStore({ dataDir });
+
+  try {
+    const saved = store.save("copy", "待删除", {}, { titles: ["x"] });
+    const kept = store.save("report", "保留", {}, "内容");
+
+    assert.equal(store.remove(saved.id), true);
+    assert.equal(store.get(saved.id), null);
+    assert.equal(fs.existsSync(path.join(dataDir, "history", `${saved.id}.json`)), false);
+    assert.deepEqual(store.list().map((item) => item.id), [kept.id]);
+
+    assert.equal(store.remove(saved.id), false);
+    assert.equal(store.remove(""), false);
+    assert.equal(store.remove("../config"), false);
+  } finally {
+    removeDir(dataDir);
+  }
+});
+
 test("keeps at most 200 history records by deleting the oldest files", () => {
   const dataDir = makeDataDir();
   const store = createHistoryStore({ dataDir });

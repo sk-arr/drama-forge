@@ -76,6 +76,32 @@ test("GET /api/history/{id} returns full record and 404 for missing", async () =
   }
 });
 
+test("DELETE /api/history/{id} removes the record and 404s for missing", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+  const historyStore = createHistoryStore({ dataDir });
+  const saved = historyStore.save("copy", "爆款文案 · 待删除 · 抖音", {}, { titles: ["x"] });
+
+  const server = createServer({ configStore, historyStore });
+  const port = await listen(server);
+
+  try {
+    const deleted = await fetch(`http://127.0.0.1:${port}/api/history/${saved.id}`, { method: "DELETE" });
+    assert.equal(deleted.status, 200);
+    assert.deepEqual(await deleted.json(), { ok: true });
+    assert.equal(historyStore.get(saved.id), null);
+
+    const again = await fetch(`http://127.0.0.1:${port}/api/history/${saved.id}`, { method: "DELETE" });
+    assert.equal(again.status, 404);
+
+    const remaining = await (await fetch(`http://127.0.0.1:${port}/api/history`)).json();
+    assert.equal(remaining.list.length, 0);
+  } finally {
+    await close(server);
+    removeDir(dataDir);
+  }
+});
+
 test("demo ideas stream writes an ideas history record", async () => {
   const dataDir = makeDataDir();
   const configStore = createConfigStore({ dataDir });

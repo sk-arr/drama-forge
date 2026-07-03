@@ -155,6 +155,7 @@
       detail: null,
       detailLoading: false,
       undoing: false,
+      deleting: false,
     },
   };
 
@@ -2003,6 +2004,12 @@
       }
     }
 
+    buttons.push([
+      '<button type="button" class="btn-secondary btn-danger" data-action="delete-history" data-id="',
+      ui.escapeHtml(record.id),
+      '">删除</button>',
+    ].join(""));
+
     return buttons.join("");
   }
 
@@ -2072,7 +2079,8 @@
       state.history.list.map(function (item) {
         var meta = historyTypeMeta(item.type);
         return [
-          '<button type="button" class="history-row" data-action="open-history" data-id="',
+          '<div class="history-row">',
+          '<button type="button" class="history-row-main" data-action="open-history" data-id="',
           ui.escapeHtml(item.id),
           '"><span class="history-row-icon">',
           ui.icon(meta.icon),
@@ -2084,6 +2092,12 @@
           '</span><span class="history-row-arrow">',
           ui.icon("chevron"),
           "</span></button>",
+          '<button type="button" class="history-row-delete" data-action="delete-history" data-id="',
+          ui.escapeHtml(item.id),
+          '" title="删除" aria-label="删除这条记录">',
+          ui.icon("trash"),
+          "</button>",
+          "</div>",
         ].join("");
       }).join(""),
       "</div>",
@@ -2192,6 +2206,30 @@
       exporter.downloadText(prefix + "_" + exporter.dateStamp(new Date()) + ".md", content, "text/markdown;charset=utf-8");
       ui.showToast("Markdown 已导出", "success");
     }
+  }
+
+  async function handleHistoryDelete(id) {
+    if (!id || state.history.deleting) {
+      return;
+    }
+    if (!window.confirm("删除后不可恢复，确定删除这条历史记录吗？")) {
+      return;
+    }
+
+    state.history.deleting = true;
+    try {
+      await api.deleteHistory(id);
+      if (state.history.detailId === id) {
+        state.history.detailId = "";
+        state.history.detail = null;
+      }
+      ui.showToast("已删除", "success");
+    } catch (error) {
+      ui.showToast(error.message || "删除失败", "error", 6000);
+    } finally {
+      state.history.deleting = false;
+    }
+    await loadHistory(true);
   }
 
   async function handleHistoryUndo() {
@@ -3235,6 +3273,11 @@
 
       if (action === "history-undo") {
         await handleHistoryUndo();
+        return;
+      }
+
+      if (action === "delete-history") {
+        await handleHistoryDelete(actionTarget.getAttribute("data-id") || "");
         return;
       }
 
