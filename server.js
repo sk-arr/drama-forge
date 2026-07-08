@@ -739,10 +739,59 @@ function createServer(options) {
   });
 }
 
+function startServer(options) {
+  const settings = options || {};
+  const host = settings.host || HOST;
+  const port = settings.port || PORT;
+  const logger = settings.logger || console;
+  const url = `http://${host}:${port}`;
+  const server = settings.server || createServer(settings.services);
+
+  return new Promise((resolve, reject) => {
+    function handleError(error) {
+      server.off("listening", handleListening);
+
+      if (error.code === "EADDRINUSE") {
+        let keepAliveTimer = null;
+        logger.warn(`drama-forge already running at ${url}`);
+        logger.warn("已有服务正在运行，继续使用这个地址即可。");
+
+        if (settings.keepAliveOnAddressInUse) {
+          logger.warn("保持本窗口打开即可；用完后直接关闭窗口。");
+          keepAliveTimer = setInterval(() => {}, 2147483647);
+        }
+
+        resolve({
+          alreadyRunning: true,
+          keepAliveTimer,
+          server: null,
+          url,
+        });
+        return;
+      }
+
+      reject(error);
+    }
+
+    function handleListening() {
+      server.off("error", handleError);
+      logger.log(`drama-forge running at ${url}`);
+      resolve({
+        alreadyRunning: false,
+        server,
+        url,
+      });
+    }
+
+    server.once("error", handleError);
+    server.listen(port, host, handleListening);
+  });
+}
+
 if (require.main === module) {
-  const server = createServer();
-  server.listen(PORT, HOST, () => {
-    console.log(`drama-forge running at http://${HOST}:${PORT}`);
+  startServer({ keepAliveOnAddressInUse: true }).catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
   });
 }
 
@@ -750,4 +799,5 @@ module.exports = {
   createServer,
   HOST,
   PORT,
+  startServer,
 };

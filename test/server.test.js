@@ -6,7 +6,7 @@ const { once } = require("node:events");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { createServer } = require("../server");
+const { createServer, startServer } = require("../server");
 const { createConfigStore } = require("../lib/config");
 const { createFileOrganizer } = require("../lib/files");
 const { createHistoryStore } = require("../lib/history");
@@ -47,6 +47,34 @@ test("serves the static homepage from public/index.html", async () => {
     assert.match(response.headers.get("content-type"), /text\/html/);
     assert.match(body, /短剧工坊 drama-forge/);
   });
+});
+
+test("reports an existing server instead of throwing when the port is occupied", async () => {
+  const occupiedServer = createServer();
+  occupiedServer.listen(0, "127.0.0.1");
+  await once(occupiedServer, "listening");
+  const port = occupiedServer.address().port;
+  const warnings = [];
+
+  try {
+    const result = await startServer({
+      port,
+      host: "127.0.0.1",
+      logger: {
+        log() {},
+        warn(message) {
+          warnings.push(message);
+        },
+      },
+    });
+
+    assert.equal(result.alreadyRunning, true);
+    assert.equal(result.url, `http://127.0.0.1:${port}`);
+    assert.match(warnings.join("\n"), /already running/);
+  } finally {
+    occupiedServer.close();
+    await once(occupiedServer, "close");
+  }
 });
 
 test("returns JSON 404 for unknown API routes", async () => {
