@@ -38,6 +38,16 @@ function makeTmpDir(name) {
   return dir;
 }
 
+async function getFreePort() {
+  const server = createServer();
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const port = server.address().port;
+  server.close();
+  await once(server, "close");
+  return port;
+}
+
 test("serves the static homepage from public/index.html", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/`);
@@ -49,12 +59,37 @@ test("serves the static homepage from public/index.html", async () => {
   });
 });
 
+test("opens the homepage after starting a new server", async () => {
+  const port = await getFreePort();
+  const openedUrls = [];
+  const result = await startServer({
+    port,
+    host: "127.0.0.1",
+    logger: {
+      log() {},
+      warn() {},
+    },
+    openUrl(url) {
+      openedUrls.push(url);
+    },
+  });
+
+  try {
+    assert.equal(result.alreadyRunning, false);
+    assert.deepEqual(openedUrls, [result.url]);
+  } finally {
+    result.server.close();
+    await once(result.server, "close");
+  }
+});
+
 test("reports an existing server instead of throwing when the port is occupied", async () => {
   const occupiedServer = createServer();
   occupiedServer.listen(0, "127.0.0.1");
   await once(occupiedServer, "listening");
   const port = occupiedServer.address().port;
   const warnings = [];
+  const openedUrls = [];
 
   try {
     const result = await startServer({
@@ -66,11 +101,15 @@ test("reports an existing server instead of throwing when the port is occupied",
           warnings.push(message);
         },
       },
+      openUrl(url) {
+        openedUrls.push(url);
+      },
     });
 
     assert.equal(result.alreadyRunning, true);
     assert.equal(result.url, `http://127.0.0.1:${port}`);
     assert.match(warnings.join("\n"), /already running/);
+    assert.deepEqual(openedUrls, [result.url]);
   } finally {
     occupiedServer.close();
     await once(occupiedServer, "close");

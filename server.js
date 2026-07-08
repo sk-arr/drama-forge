@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
+const { spawn } = require("node:child_process");
 const { createHotCache } = require("./lib/cache");
 const { createConfigStore, isMaskedApiKey, mergeConfig } = require("./lib/config");
 const { createFileOrganizer } = require("./lib/files");
@@ -739,11 +740,39 @@ function createServer(options) {
   });
 }
 
+function openUrlInBrowser(url, logger) {
+  const output = logger || console;
+  const command = process.platform === "win32" ? "cmd" : process.platform === "darwin" ? "open" : "xdg-open";
+  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+  const child = spawn(command, args, {
+    detached: true,
+    stdio: "ignore",
+  });
+
+  child.on("error", (error) => {
+    output.warn(`无法自动打开浏览器：${error.message}`);
+  });
+  child.unref();
+}
+
+function openHomepage(openUrl, url, logger) {
+  if (!openUrl) {
+    return;
+  }
+
+  try {
+    openUrl(url, logger);
+  } catch (error) {
+    logger.warn(`无法自动打开浏览器：${error.message}`);
+  }
+}
+
 function startServer(options) {
   const settings = options || {};
   const host = settings.host || HOST;
   const port = settings.port || PORT;
   const logger = settings.logger || console;
+  const openUrl = settings.openUrl || null;
   const url = `http://${host}:${port}`;
   const server = settings.server || createServer(settings.services);
 
@@ -755,6 +784,7 @@ function startServer(options) {
         let keepAliveTimer = null;
         logger.warn(`drama-forge already running at ${url}`);
         logger.warn("已有服务正在运行，继续使用这个地址即可。");
+        openHomepage(openUrl, url, logger);
 
         if (settings.keepAliveOnAddressInUse) {
           logger.warn("保持本窗口打开即可；用完后直接关闭窗口。");
@@ -776,6 +806,7 @@ function startServer(options) {
     function handleListening() {
       server.off("error", handleError);
       logger.log(`drama-forge running at ${url}`);
+      openHomepage(openUrl, url, logger);
       resolve({
         alreadyRunning: false,
         server,
@@ -789,7 +820,10 @@ function startServer(options) {
 }
 
 if (require.main === module) {
-  startServer({ keepAliveOnAddressInUse: true }).catch((error) => {
+  startServer({
+    keepAliveOnAddressInUse: true,
+    openUrl: openUrlInBrowser,
+  }).catch((error) => {
     console.error(error);
     process.exitCode = 1;
   });
