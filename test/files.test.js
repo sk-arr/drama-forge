@@ -82,6 +82,75 @@ test("execute blocks plans that leave the selected directory", () => {
   }
 });
 
+test("scan rejects a target folder that is a symlink out of the selected directory", () => {
+  const dir = makeTmpDir("scan-symlink");
+  const outside = makeTmpDir("scan-symlink-outside");
+  const organizer = createFileOrganizer();
+
+  try {
+    writeFile(path.join(dir, "a.mp4"));
+    fs.symlinkSync(outside, path.join(dir, "视频"));
+    assert.throws(() => {
+      organizer.scan({ dir, rule: "type", template: "" });
+    }, /必须在所选目录内/);
+    assert.equal(fs.existsSync(path.join(outside, "a.mp4")), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("execute does not follow a symlink directory out of the selected folder", () => {
+  const dir = makeTmpDir("execute-symlink");
+  const outside = makeTmpDir("execute-symlink-outside");
+  const historyStore = createHistoryStore({ dataDir: path.join(dir, ".data") });
+  const organizer = createFileOrganizer({ historyStore });
+
+  try {
+    writeFile(path.join(dir, "a.mp4"), "video");
+    fs.symlinkSync(outside, path.join(dir, "视频"));
+    const result = organizer.execute({
+      dir,
+      plan: [{ from: path.join(dir, "a.mp4"), to: path.join(dir, "视频", "a.mp4") }],
+    });
+
+    assert.equal(result.moved, 0);
+    assert.equal(result.failed.length, 1);
+    assert.match(result.failed[0].reason, /必须在所选目录内/);
+    assert.equal(fs.existsSync(path.join(dir, "a.mp4")), true);
+    assert.equal(fs.existsSync(path.join(outside, "a.mp4")), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("execute can move a symlink file without following it outside", () => {
+  const dir = makeTmpDir("symlink-file");
+  const outside = makeTmpDir("symlink-file-target");
+  const historyStore = createHistoryStore({ dataDir: path.join(dir, ".data") });
+  const organizer = createFileOrganizer({ historyStore });
+  const target = path.join(outside, "real.mp4");
+
+  try {
+    writeFile(target, "video");
+    fs.symlinkSync(target, path.join(dir, "link.mp4"));
+    const result = organizer.execute({
+      dir,
+      plan: [{ from: path.join(dir, "link.mp4"), to: path.join(dir, "视频", "link.mp4") }],
+    });
+
+    assert.equal(result.moved, 1);
+    assert.equal(result.failed.length, 0);
+    assert.equal(fs.existsSync(target), true);
+    assert.equal(fs.readFileSync(target, "utf8"), "video");
+    assert.equal(fs.lstatSync(path.join(dir, "视频", "link.mp4")).isSymbolicLink(), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
 test("execute resolves name conflicts, records history, and undo restores files", () => {
   const dir = makeTmpDir("execute-undo");
   const dataDir = path.join(dir, ".data");

@@ -1,4 +1,10 @@
 data/
 node_modules/
+tmp-test/
 *.log
 .claude/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

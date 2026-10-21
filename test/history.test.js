@@ -79,6 +79,9 @@ test("remove moves a record into the trash and rejects unsafe ids", () => {
     assert.equal(store.remove(saved.id), false);
     assert.equal(store.remove(""), false);
     assert.equal(store.remove("../config"), false);
+    assert.equal(store.get("C:secret"), null);
+    assert.equal(store.remove("C:secret"), false);
+    assert.equal(store.restore("../config"), false);
   } finally {
     removeDir(dataDir);
   }

@@ -345,7 +345,13 @@
   }
 
   function itemUrl(sourceId, item) {
-    return item && item.url ? item.url : searchUrlFor(sourceId, item && item.title);
+    var fallback = searchUrlFor(sourceId, item && item.title);
+    var raw = item && item.url ? String(item.url) : "";
+    var compact = raw.replace(/[\u0000-\u001F\s]+/g, "");
+    if (!compact || /^(javascript|data|vbscript):/i.test(compact)) {
+      return fallback;
+    }
+    return raw.trim();
   }
 
   function parseIdeaCards(text) {

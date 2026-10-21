@@ -56,6 +56,11 @@ test("saves config and returns apiKey masked for public reads", () => {
     assert.equal(store.readPublicConfig().ai.apiKey, "key-••••abcd");
     assert.equal(store.readPublicConfig().demoMode, true);
     assert.equal(store.readPublicConfig().refreshMinutes, 15);
+    if (process.platform !== "win32") {
+      fs.chmodSync(store.configPath, 0o644);
+      store.readConfig();
+      assert.equal(fs.statSync(store.configPath).mode & 0o777, 0o600);
+    }
   } finally {
     removeDir(dataDir);
   }

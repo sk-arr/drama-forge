@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { once } = require("node:events");
 const fs = require("node:fs");
+const http = require("node:http");
 const path = require("node:path");
 
 const { createServer, startServer } = require("../server");
@@ -127,6 +128,57 @@ test("returns JSON 404 for unknown API routes", async () => {
   });
 });
 
+test("rejects requests whose Host header is not loopback", async () => {
+  await withServer(async (baseUrl) => {
+    const url = new URL(baseUrl);
+    const forbidden = await new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: "127.0.0.1",
+        port: url.port,
+        path: "/api/config",
+        method: "GET",
+        headers: { host: "evil.example" },
+      }, (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    const allowed = await new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: "127.0.0.1",
+        port: url.port,
+        path: "/",
+        method: "GET",
+        headers: { host: `localhost:${url.port}` },
+      }, (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+
+    assert.equal(forbidden, 403);
+    assert.equal(allowed, 200);
+  });
+});
+
+test("rejects request bodies larger than 1MB", async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/config`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pad: "a".repeat(1024 * 1024) }),
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error, "请求体过大");
+  });
+});
+
 test("rejects malformed JSON bodies with a human-readable error", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/config`, {
@@ -241,6 +293,29 @@ test("tests AI connection through injected service using posted settings", async
       assert.equal(body.ok, true);
       assert.equal(body.latencyMs, 18);
     }, { configStore, aiService });
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("does not leak the saved API key through a hot source path", async () => {
+  const dataDir = makeDataDir();
+  const configStore = createConfigStore({ dataDir });
+  configStore.saveConfig({
+    ai: {
+      apiKey: "key-hot-secret-9999",
+    },
+  });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/hot?source=${encodeURIComponent("../config")}`);
+      const body = await response.json();
+
+      assert.equal(response.status, 200);
+      assert.equal(body.error, "未知热点来源");
+      assert.equal(JSON.stringify(body).includes("key-hot-secret-9999"), false);
+    }, { configStore });
   } finally {
     fs.rmSync(dataDir, { recursive: true, force: true });
   }

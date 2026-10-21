@@ -61,6 +61,24 @@ test("translates invalid key responses into human-readable errors", async () => 
   );
 });
 
+test("rejects non-http provider addresses before sending the key", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () => testAiConnection({
+      baseUrl: "file:///tmp/drama-forge",
+      model: "deepseek-chat",
+      apiKey: "key-test",
+    }, {
+      fetchImpl: async () => {
+        calls += 1;
+        return { ok: true, status: 200, text: async () => "" };
+      },
+    }),
+    /http 或 https/,
+  );
+  assert.equal(calls, 0);
+});
+
 test("requires an apiKey before testing the provider", async () => {
   await assert.rejects(
     () => testAiConnection({
@@ -69,6 +87,16 @@ test("requires an apiKey before testing the provider", async () => {
       apiKey: "",
     }),
     /请先填写 API Key/,
+  );
+});
+
+test("loadPrompt rejects names that leave the prompts directory", () => {
+  assert.throws(
+    () => loadPrompt("../config", {
+      rootDir: path.join(__dirname, ".."),
+      dataDir: path.join(__dirname, "..", "data"),
+    }),
+    /提示词模板不存在/,
   );
 });
 

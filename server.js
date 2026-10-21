@@ -229,16 +229,34 @@ async function streamDemoText(res, content) {
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
+    let received = 0;
+    let settled = false;
+
+    function fail(error) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      reject(error);
+    }
 
     req.on("data", (chunk) => {
-      chunks.push(chunk);
-      if (Buffer.concat(chunks).length > 1024 * 1024) {
-        reject(new Error("请求体过大"));
-        req.destroy();
+      if (settled) {
+        return;
       }
+      received += chunk.length;
+      if (received > 1024 * 1024) {
+        fail(new Error("请求体过大"));
+        return;
+      }
+      chunks.push(chunk);
     });
 
     req.on("end", () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
       const raw = Buffer.concat(chunks).toString("utf8").trim();
       if (!raw) {
         resolve({});
@@ -252,8 +270,37 @@ function readJsonBody(req) {
       }
     });
 
-    req.on("error", reject);
+    req.on("error", (error) => {
+      fail(error);
+    });
   });
+}
+
+function isLoopbackRequest(req) {
+  const header = req.headers && req.headers.host;
+  if (!header || typeof header !== "string") {
+    return false;
+  }
+
+  let hostname = header.trim().toLowerCase();
+  if (!hostname) {
+    return false;
+  }
+
+  if (hostname.startsWith("[")) {
+    const end = hostname.indexOf("]");
+    if (end <= 1) {
+      return false;
+    }
+    hostname = hostname.slice(1, end);
+  } else {
+    const colon = hostname.lastIndexOf(":");
+    if (colon > -1 && /^\d+$/.test(hostname.slice(colon + 1))) {
+      hostname = hostname.slice(0, colon);
+    }
+  }
+
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
 }
 
 async function handleApi(req, res, pathname, services) {
@@ -720,13 +767,29 @@ function createServer(options) {
   const services = options || {};
 
   return http.createServer((req, res) => {
+    if (!isLoopbackRequest(req)) {
+      sendText(res, 403, "只允许从本机访问");
+      return;
+    }
+
     const url = new URL(req.url || "/", `http://${HOST}:${PORT}`);
     const pathname = url.pathname;
 
     if (pathname.startsWith("/api/")) {
       handleApi(req, res, pathname, services).catch((error) => {
         console.error(error);
-        sendJson(res, 500, { error: "服务器内部错误" });
+        if (res.writableEnded) {
+          return;
+        }
+        if (res.headersSent) {
+          res.end();
+          return;
+        }
+        try {
+          sendJson(res, 500, { error: "服务器内部错误" });
+        } catch (writeError) {
+          console.error(writeError);
+        }
       });
       return;
     }
