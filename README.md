@@ -50,7 +50,7 @@
 要求:Node.js ≥ 18(需要内置 fetch),不需要安装任何依赖。
 
 ```bash
-git clone https://github.com/<你的用户名>/drama-forge.git
+git clone https://github.com/sk-arr/drama-forge.git
 cd drama-forge
 node server.js
 ```
@@ -84,7 +84,7 @@ drama-forge/
 **几个设计决策:**
 
 - **零依赖**:只用 Node 内置模块。任何人克隆下来 `node server.js` 就能跑,没有安装环节,也没有供应链风险。
-- **key 安全**:API Key 只保存在本机 `data/config.json`(整个 `data/` 目录不进 git);浏览器端永远拿不到 key,所有对外请求由后端转发注入;服务只监听本机回环地址。
+- **key 安全**:API Key 只保存在本机 `data/config.json`,文件权限收紧为仅当前用户可读(整个 `data/` 目录不进 git);浏览器端永远拿不到 key,所有对外请求由后端转发注入;服务只监听本机回环地址,并拒绝 Host 不是 `127.0.0.1`、`localhost` 或 `::1` 的请求。
 - **适配器模式**:热榜源、AI 服务商都是可插拔的。换模型只需要在设置页改预设;加热榜源只需要在 `lib/sources/` 加一个几十行的文件。
 - **演示容错**:热点有缓存兜底,AI 有演示模式兜底,面向真实使用场景设计,而不是只能在理想网络下跑通的玩具。
 

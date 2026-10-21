@@ -54,6 +54,29 @@ test("normalizes UApiPro response into the shared list shape", () => {
   ]);
 });
 
+test("drops scriptable urls from hot items and keeps ordinary links", () => {
+  const list = normalizeHotList("uapis", {
+    list: [
+      { index: 1, title: "危险链接", url: "javascript:alert(1)" },
+      { index: 2, title: "换行绕过", url: "java\nscript:alert(1)" },
+      { index: 3, title: "正常链接", url: "https://example.com/item" },
+    ],
+  });
+
+  assert.equal(list[0].url, "");
+  assert.equal(list[1].url, "");
+  assert.equal(list[2].url, "https://example.com/item");
+
+  const hongguo = duanjuSource.normalizeHongguoList({
+    data: [
+      { rank: 1, book_name: "应用链接", share_url: "aweme://drama/1" },
+      { rank: 2, book_name: "脚本链接", share_url: "javascript:alert(1)" },
+    ],
+  });
+  assert.equal(hongguo[0].url, "aweme://drama/1");
+  assert.equal(hongguo[1].url, "");
+});
+
 test("normalizes nested extra image fields into cover urls", () => {
   const list = normalizeHotList("uapis", {
     list: [

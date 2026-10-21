@@ -103,6 +103,30 @@ test("falls back to stale cache when source request fails", async () => {
   }
 });
 
+test("refuses hot source ids that escape the cache directory", async () => {
+  const dataDir = makeDataDir();
+  const cache = createHotCache({ dataDir });
+  fs.writeFileSync(path.join(dataDir, "config.json"), JSON.stringify({ ai: { apiKey: "secret-key" } }));
+  let calls = 0;
+
+  try {
+    const result = await cache.fetchHot("../config", {
+      fetcher: async () => {
+        calls += 1;
+        return { list: [] };
+      },
+    });
+
+    assert.equal(calls, 0);
+    assert.equal(result.error, "未知热点来源");
+    assert.equal(JSON.stringify(result).includes("secret-key"), false);
+    assert.throws(() => cache.writeCache("../config", { list: [] }), /未知热点来源/);
+    assert.match(fs.readFileSync(path.join(dataDir, "config.json"), "utf8"), /secret-key/);
+  } finally {
+    removeDir(dataDir);
+  }
+});
+
 test("returns an error structure when source fails with no cache", async () => {
   const dataDir = makeDataDir();
   const cache = createHotCache({ dataDir });

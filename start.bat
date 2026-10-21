@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-start http://127.0.0.1:3900
 node server.js
+if errorlevel 1 pause
